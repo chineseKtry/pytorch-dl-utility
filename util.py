@@ -1,13 +1,78 @@
 'imports and definitions shared by various defs files'
 
 import numpy as np
+import json
 
 from math import log, sqrt
 from time import time
 from pprint import pprint
 
+import torch
+import torch.nn.functional as F
+
 from sklearn.metrics import roc_auc_score as AUC, log_loss, accuracy_score as accuracy
 from sklearn.metrics import mean_squared_error as MSE, mean_absolute_error as MAE
+
+class Model:
+    def __init__(self, network, criterion, optimizer):
+        self.network = network
+        self.criterion = criterion
+        self.optimizer = optimizer
+        self.epoch = 0
+
+    def train(self, X, Y, epochs, batch_size): # TODO checkpointing and early stopping
+        self.network.train()
+        N = len(X)
+        indices = np.arange(N)
+        np.random.shuffle(indices)
+
+        while self.epoch < epochs:
+            for i in xrange(0, N, batch_size):
+                x = torch.from_numpy(X[i: i + batch_size])
+                y = torch.from_numpy(np.argmax(Y[i: i + batch_size], axis=1))
+
+                y_pred = self.network(x.float())
+                loss = self.criterion(y_pred, y.long())
+
+                self.optimizer.zero_grad()
+                loss.backward()
+                self.optimizer.step()
+            self.epoch += 1
+            print('epoch', self.epoch, 'loss', loss.item())
+        return self
+
+    def evaluate(self, X, Y): # TODO generalize
+        self.network.eval()
+        y_pred_logit = self.network(torch.from_numpy(X).float())
+        max_pred, y_pred = torch.max(y_pred_logit, 1)
+        Y_val_value = torch.from_numpy(np.argmax(Y, axis=1)).long()
+        loss = self.criterion(y_pred_logit, Y_val_value).item()
+        accuracy = y_pred.eq(Y_val_value).float().mean()
+        return loss, accuracy
+
+    def predict(self, X): # TODO generalize
+        self.network.eval()
+        y_pred_logit = self.network(torch.from_numpy(X).float())
+        y_pred = F.softmax(y_pred_logit, dim=1)
+        return y_pred
+
+    def save_checkpoint(self, checkpoint_base):
+        state = {
+            'epoch': self.epoch,
+            'network': self.network.state_dict(),
+            'optimizer': self.optimizer.state_dict()
+        }
+        torch.save(state, checkpoint_base + '.pth')
+        # TODO save best and last
+        return self
+
+    def load_checkpoint(self, checkpoint_file):
+        state = torch.load(checkpoint_file)
+        self.network.load_state_dict(state['network'])
+        self.optimizer.load_state_dict(state['optimizer'])
+        self.epoch = state['epoch']
+        return self
+
 
 # handle floats which should be integers
 # works with flat params
@@ -22,13 +87,14 @@ def handle_integers(params):
 
 
 def load_json(path):
-    with open(path, 'rb') as f:
+    with open(path, 'r+') as f:
         return json.load(f)
 
 
 def save_json(dict_, path):
-    with open(path, 'wb') as f:
-        json.dump(dict_, codecs.getwriter('utf-8')(f), indent=4, sort_keys=True)
+    with open(path, 'w+') as f:
+        json.dump(dict_, f, indent=4, sort_keys=True)
+
 
 def train_and_eval_sklearn_classifier(clf, data):
 
@@ -64,6 +130,7 @@ def train_and_eval_sklearn_classifier(clf, data):
 
     # return { 'loss': 1 - auc, 'log_loss': ll, 'auc': auc }
     return {'loss': ll, 'log_loss': ll, 'auc': auc}
+
 
 def train_and_eval_sklearn_regressor(reg, data):
 

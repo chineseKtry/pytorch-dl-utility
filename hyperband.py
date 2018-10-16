@@ -6,16 +6,9 @@ from random import random
 from math import log, ceil
 from time import time, ctime
 
-try:
-    from hyperopt import hp
-    from hyperopt.pyll.stochastic import sample
-except ImportError:
-    print 'In order to achieve operational capability, this programme requires hyperopt to be installed (pip install hyperopt), unless you make get_params() use something else.'
-
-
 class Hyperband:
 
-    def __init__(self, get_params_function, try_params_function, datadir, max_iter=81, eta=3, datamode='memory'):
+    def __init__(self, get_params_function, try_params_function, datadir, max_epochs=81, eta=3, datamode='memory'):
         self.get_params = get_params_function
         self.try_params = try_params_function
 
@@ -37,13 +30,13 @@ class Hyperband:
             }
 
         self.datamode = datamode
-        self.max_iter = max_iter  	# maximum iterations per configuration
+        self.max_epochs = max_epochs  	# maximum epochs per configuration
         # defines configuration downsampling rate (default = 3)
         self.eta = eta
 
         self.logeta = lambda x: log(x) / log(self.eta)
-        self.s_max = int(self.logeta(self.max_iter))
-        self.B = (self.s_max + 1) * self.max_iter
+        self.s_max = int(self.logeta(self.max_epochs))
+        self.B = (self.s_max + 1) * self.max_epochs
 
         self.results = []  # list of dicts
         self.counter = 0
@@ -56,24 +49,23 @@ class Hyperband:
         for s in reversed(range(self.s_max + 1)):
 
             # initial number of configurations
-            n = int(ceil(self.B / self.max_iter / (s + 1) * self.eta ** s))
+            n = int(ceil(self.B / self.max_epochs / (s + 1) * self.eta ** s))
 
-            # initial number of iterations per config
-            r = self.max_iter * self.eta ** (-s)
+            # initial number of epochs per config
+            r = self.max_epochs * self.eta ** (-s)
 
             # n random configurations
             T = [self.get_params() for i in range(n)]
 
             for i in range((s + 1) - int(skip_last)):  # changed from s + 1
 
-                # Run each of the n configs for <iterations>
+                # Run each of the n configs for <epochs>
                 # and keep best (n_configs / eta) configurations
 
                 n_configs = n * self.eta ** (-i)
-                n_iterations = int(round(r * self.eta ** (i)))
+                n_epochs = int(round(r * self.eta ** (i)))
 
-                print '\n*** {} configurations x {:.1f} iterations each'.format(
-                    n_configs, n_iterations)
+                print '\n*** {} configurations x {:.1f} epochs each'.format(n_configs, n_epochs)
 
                 val_losses = []
                 early_stops = []
@@ -89,7 +81,7 @@ class Hyperband:
                     if dry_run:
                         result = {'loss': random(), 'log_loss': random(), 'auc': random()}
                     else:
-                        result = self.try_params(t, n_iterations, self.data, self.datamode)
+                        result = self.try_params(t, n_epochs, self.data, self.datamode)
 
                     assert(type(result) == dict)
                     assert('loss' in result)
@@ -112,7 +104,7 @@ class Hyperband:
                     result['counter'] = self.counter
                     result['seconds'] = seconds
                     result['params'] = t
-                    result['iterations'] = n_iterations
+                    result['epochs'] = n_epochs
 
                     self.results.append(result)
 
