@@ -1,98 +1,93 @@
-from common_defs import *
+from __future__ import print_function
 
+import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
 
-space = {
-    'dropout': hp.choice('dropout', (0.1, 0.5, 0.75)),
-    'delta': hp.choice('delta', (1e-04, 1e-06, 1e-08)),
-    'momentum': hp.choice('momentum', (0.9, 0.99, 0.999)),
-}
+from base_model import BaseModel
+import util
+import metrics
+from batch_generator import H5pyBatchGenerator
 
 
-def get_params():
-    params = sample(space)
-    return handle_integers(params)
+def get_config():
+    return {
+        'dropout': np.random.choice([0.1, 0.5, 0.75]),
+        'delta': np.random.choice([1e-4, 1e-6, 1e-8]),
+        'momentum': np.random.choice([0.9, 0.99, 0.999])
+    }
+
+process_x_y = lambda X, Y: (X.astype(np.float32), Y[:, 1].astype(np.long))
 
 
-def print_params(params):
-    pprint({k: v for k, v in params.items() if not k.startswith('layer_')})
-    print
+def get_train_generator(data_path, batch_size):
+    return H5pyBatchGenerator(data_path, 'train', batch_size=batch_size,
+                              shuffle=True, process_x_y=process_x_y)
+
+
+def get_val_generator(data_path, batch_size=None):
+    return H5pyBatchGenerator(data_path, 'valid', batch_size=batch_size, process_x_y=process_x_y)
+
+
+def get_test_generator(data_path, batch_size=None):
+    return H5pyBatchGenerator(data_path, 'test', batch_size=batch_size, process_x_y=process_x_y)
+
+
+def get_model(config, save_dir, args):
+    return Model(config, save_dir, args)
 
 
 class Network(nn.Module):
 
-    def __init__(self, params):
+    def __init__(self, config, gpu):
         super(Network, self).__init__()
         self.features = nn.Sequential(
-            nn.Conv2d(params['input_shape'][0], 128, (1, 24), padding=(0, 11)),
+            nn.Conv2d(4, 128, (1, 24), padding=(0, 11)),
             nn.ReLU(),
             nn.MaxPool2d((1, 100))
         )
         self.classifier = nn.Sequential(
             nn.Linear(128, 32),
             nn.ReLU(),
-            nn.Dropout(params['dropout']),
+            nn.Dropout(config['dropout']),
             nn.Linear(32, 2)
         )
+        if gpu:
+            self.features = self.features.cuda()
+            self.classifier = self.classifier.cuda()
 
     def forward(self, x):
         x = self.features(x)
         x = x.view(x.size(0), -1)
         x = self.classifier(x)
-        return x
+        return {
+            'y_pred': F.softmax(x, dim=1)[:, 1],
+            'y_pred_loss': x
+        }
 
 
-def get_model(params):
-    model = Network(params)
+class Model(BaseModel):
 
-    criterion = nn.CrossEntropyLoss()
-    optimizer = optim.Adadelta(model.parameters(), eps=params['delta'], rho=params['momentum'])
-    return model, criterion, optimizer
+    def init_model(self):
+        config = self.config
+        gpu = not self.args.cpu
+        self.network = Network(config, gpu)
+        self.criterion = nn.CrossEntropyLoss()
+        self.optimizer = optim.Adadelta(self.network.parameters(),
+                                        eps=config['delta'], rho=config['momentum'])
 
+    def train_metrics(self, y_true, y_pred):
+        return {
+            'accuracy': metrics.accuracy(y_true, y_pred)
+        }
 
-def try_params(params, n_iterations, data=None, datamode='memory'):
-    print 'iterations:', n_iterations
-    print_params(params)
+    def eval_metrics(self, y_true, y_pred):
+        return {
+            'accuracy': metrics.accuracy(y_true, y_pred),
+            'auroc': metrics.auroc(y_true, y_pred)
+        }
 
-    batch_size = 100
-    if datamode == 'memory':
-        X_train, Y_train = data['train']
-        X_val, Y_val = data['valid']
-        input_shape = X_train.shape[1:]
-    else:
-        train_generator = data['train']['gen_func'](batch_size, data['train']['path'])
-        valid_generator = data['valid']['gen_func'](batch_size, data['valid']['path'])
-        train_epoch_step = data['train']['n_sample'] / batch_size
-        valid_epoch_step = data['valid']['n_sample'] / batch_size
-        input_shape = data['train']['gen_func'](
-            batch_size, data['train']['path']).next()[0].shape[1:]
-    params['input_shape'] = input_shape
-
-    model, criterion, optimizer = get_model(params)
-
-    if datamode == 'memory':
-        for t in range(n_iterations):
-            indices = np.random.choice(len(X_train), size=batch_size, replace=False)
-            x, y = torch.from_numpy(X_train[indices]), torch.from_numpy(
-                np.argmax(Y_train[indices], axis=1))
-
-            y_pred = model(x.float())
-            loss = criterion(y_pred, y.long())
-            loss.item()
-
-            optimizer.zero_grad()
-            loss.backward()
-            optimizer.step()
-
-        y_pred_logit = model(torch.from_numpy(X_val).float())
-        max_pred, y_pred = torch.max(y_pred_logit, 1)
-        Y_val_value = torch.from_numpy(np.argmax(Y_val, axis=1)).long()
-        loss = criterion(y_pred_logit, Y_val_value)
-        # accuracy = y_pred.eq(Y_val_value).float().mean()
-        # print(loss.item(), accuracy.item())
-    else:
-        raise NotImplementedError('Generator not supported for now')
-    return dict(loss=loss, params=params)
+    def get_hyperband_reward(self, result):
+        return -result['val_loss']

@@ -1,24 +1,26 @@
-'imports and definitions shared by various defs files'
-
 import numpy as np
 
-from math import log, sqrt
-from time import time
-from pprint import pprint
+import enlighten
+import json
+import os
 
 from sklearn.metrics import roc_auc_score as AUC, log_loss, accuracy_score as accuracy
 from sklearn.metrics import mean_squared_error as MSE, mean_absolute_error as MAE
 
-# handle floats which should be integers
-# works with flat params
-def handle_integers(params):
-    new_params = {}
-    for k, v in params.items():
-        if type(v) == float and int(v) == v:
-            new_params[k] = int(v)
-        else:
-            new_params[k] = v
-    return new_params
+progress_manager = enlighten.get_manager()
+
+
+def makedirs(d):
+    if not os.path.exists(d):
+        os.makedirs(d)
+
+
+def get_config_name(config):
+    return ','.join(sorted('%s=%s' % (k, v) for k, v in config.items()))
+
+
+def format_json(dict_):
+    return json.dumps(dict_, indent=4, sort_keys=True)
 
 
 def load_json(path):
@@ -27,8 +29,9 @@ def load_json(path):
 
 
 def save_json(dict_, path):
-    with open(path, 'wb') as f:
-        json.dump(dict_, codecs.getwriter('utf-8')(f), indent=4, sort_keys=True)
+    with open(path, 'w+') as f:
+        json.dump(dict_, f, indent=4, sort_keys=True)
+
 
 def train_and_eval_sklearn_classifier(clf, data):
 
@@ -49,8 +52,6 @@ def train_and_eval_sklearn_classifier(clf, data):
     auc = AUC(y_train, p)
     acc = accuracy(y_train, np.round(p))
 
-    print '\n# training | log loss: {:.2%}, AUC: {:.2%}, accuracy: {:.2%}'.format(ll, auc, acc)
-
     try:
         p = clf.predict_proba(x_test)[:, 1]    # sklearn convention
     except IndexError:
@@ -60,10 +61,9 @@ def train_and_eval_sklearn_classifier(clf, data):
     auc = AUC(y_test, p)
     acc = accuracy(y_test, np.round(p))
 
-    print '# testing  | log loss: {:.2%}, AUC: {:.2%}, accuracy: {:.2%}'.format(ll, auc, acc)
-
     # return { 'loss': 1 - auc, 'log_loss': ll, 'auc': auc }
     return {'loss': ll, 'log_loss': ll, 'auc': auc}
+
 
 def train_and_eval_sklearn_regressor(reg, data):
 
@@ -77,7 +77,7 @@ def train_and_eval_sklearn_regressor(reg, data):
     p = reg.predict(x_train)
 
     mse = MSE(y_train, p)
-    rmse = sqrt(mse)
+    rmse = math.sqrt(mse)
     mae = MAE(y_train, p)
 
     print '\n# training | RMSE: {:.4f}, MAE: {:.4f}'.format(rmse, mae)
@@ -87,7 +87,7 @@ def train_and_eval_sklearn_regressor(reg, data):
     p = reg.predict(x_test)
 
     mse = MSE(y_test, p)
-    rmse = sqrt(mse)
+    rmse = math.sqrt(mse)
     mae = MAE(y_test, p)
 
     print '# testing  | RMSE: {:.4f}, MAE: {:.4f}'.format(rmse, mae)
