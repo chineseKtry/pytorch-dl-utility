@@ -5,7 +5,6 @@ import torch.nn as nn
 import torch.optim as optim
 
 from base_model import ConvClassificationModel, ConvClassificationNetwork
-import util
 from batch_generator import H5pyBatchGenerator
 
 
