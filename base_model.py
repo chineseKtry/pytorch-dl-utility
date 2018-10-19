@@ -6,7 +6,10 @@ from time import time
 import numpy as np
 import pandas as pd
 import torch
+import torch.nn as nn
+import torch.nn.functional as F
 
+import metrics
 import util
 
 
@@ -159,3 +162,45 @@ class BaseModel(object):
 
     def save_config(self):
         util.save_json(self.config, os.path.join(self.save_dir, 'config.json'))
+
+
+class ConvClassificationNetwork(nn.Module):
+
+    def __init__(self, features, classifier, gpu):
+        super(ConvClassificationNetwork, self).__init__()
+        if gpu:
+            features, classifier = features.cuda(), classifier.cuda()
+        self.features, self.classifier = features, classifier
+
+    def forward(self, x):
+        x = self.features(x)
+        x = x.view(x.size(0), -1)
+        x = self.classifier(x)
+        return {
+            'y_pred': F.softmax(x, dim=1)[:, 1],
+            'y_pred_loss': x
+        }
+
+
+class ConvClassificationModel(BaseModel):
+
+    def init_model(self):
+        config = self.config
+        gpu = not self.args.cpu
+        self.criterion = nn.CrossEntropyLoss()
+        self.network = None
+        self.optimizer = None
+
+    def train_metrics(self, y_true, y_pred):
+        return {
+            'accuracy': metrics.accuracy(y_true, y_pred)
+        }
+
+    def eval_metrics(self, y_true, y_pred):
+        return {
+            'accuracy': metrics.accuracy(y_true, y_pred),
+            'auroc': metrics.auroc(y_true, y_pred)
+        }
+
+    def get_hyperband_reward(self, result):
+        return -result['val_loss']

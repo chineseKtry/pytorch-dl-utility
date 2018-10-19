@@ -1,14 +1,11 @@
 from __future__ import print_function
 
 import numpy as np
-import torch
 import torch.nn as nn
-import torch.nn.functional as F
 import torch.optim as optim
 
-from base_model import BaseModel
+from base_model import ConvClassificationModel, ConvClassificationNetwork
 import util
-import metrics
 from batch_generator import H5pyBatchGenerator
 
 
@@ -39,55 +36,29 @@ def get_model(config, save_dir, args):
     return Model(config, save_dir, args)
 
 
-class Network(nn.Module):
+class Network(ConvClassificationNetwork):
 
     def __init__(self, config, gpu):
-        super(Network, self).__init__()
-        self.features = nn.Sequential(
+        features = nn.Sequential(
             nn.Conv2d(4, 128, (1, 24), padding=(0, 11)),
             nn.ReLU(),
             nn.MaxPool2d((1, 100))
         )
-        self.classifier = nn.Sequential(
+        classifier = nn.Sequential(
             nn.Linear(128, 32),
             nn.ReLU(),
             nn.Dropout(config['dropout']),
             nn.Linear(32, 2)
         )
-        if gpu:
-            self.features = self.features.cuda()
-            self.classifier = self.classifier.cuda()
-
-    def forward(self, x):
-        x = self.features(x)
-        x = x.view(x.size(0), -1)
-        x = self.classifier(x)
-        return {
-            'y_pred': F.softmax(x, dim=1)[:, 1],
-            'y_pred_loss': x
-        }
+        super(Network, self).__init__(features, classifier, gpu)
 
 
-class Model(BaseModel):
+class Model(ConvClassificationModel):
 
     def init_model(self):
         config = self.config
         gpu = not self.args.cpu
+        super(Model, self).init_model()
         self.network = Network(config, gpu)
-        self.criterion = nn.CrossEntropyLoss()
         self.optimizer = optim.Adadelta(self.network.parameters(),
                                         eps=config['delta'], rho=config['momentum'])
-
-    def train_metrics(self, y_true, y_pred):
-        return {
-            'accuracy': metrics.accuracy(y_true, y_pred)
-        }
-
-    def eval_metrics(self, y_true, y_pred):
-        return {
-            'accuracy': metrics.accuracy(y_true, y_pred),
-            'auroc': metrics.auroc(y_true, y_pred)
-        }
-
-    def get_hyperband_reward(self, result):
-        return -result['val_loss']
