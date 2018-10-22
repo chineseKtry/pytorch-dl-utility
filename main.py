@@ -39,6 +39,7 @@ if __name__ == '__main__':
             print('GPU not available, switching to CPU')
             args.cpu = True
 
+    util.makedirs(args.result_dir)
     shutil.copy(args.model_path, os.path.join(args.result_dir, 'model_def.py'))
     sys.path.append(args.result_dir)
     import model_def

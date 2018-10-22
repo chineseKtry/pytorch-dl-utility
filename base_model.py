@@ -184,12 +184,12 @@ class ConvClassificationNetwork(nn.Module):
 
 class ConvClassificationModel(BaseModel):
 
-    def init_model(self):
+    def init_model(self, network, optimizer):
         config = self.config
         gpu = not self.args.cpu
         self.criterion = nn.CrossEntropyLoss()
-        self.network = None
-        self.optimizer = None
+        self.network = network
+        self.optimizer = optimizer
 
     def train_metrics(self, y_true, y_pred):
         return {

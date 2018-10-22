@@ -57,7 +57,7 @@ class Model(ConvClassificationModel):
     def init_model(self):
         config = self.config
         gpu = not self.args.cpu
-        super(Model, self).init_model()
-        self.network = Network(config, gpu)
-        self.optimizer = optim.Adadelta(self.network.parameters(),
-                                        eps=config['delta'], rho=config['momentum'])
+        network = Network(config, gpu)
+        optimizer = optim.Adadelta(network.parameters(),
+                                   eps=config['delta'], rho=config['momentum'])
+        super(Model, self).init_model(network, optimizer)
