@@ -1,8 +1,11 @@
-import glob
+from glob import glob
 import h5py
 import os
 
 import numpy as np
+
+import torch
+from torch.utils import data
 
 class MatrixBatchGenerator(object):
 
@@ -39,10 +42,10 @@ class MatrixBatchGenerator(object):
 
 class H5pyBatchGenerator(MatrixBatchGenerator):
 
-    def __init__(self, data_dir, prefix, batch_size=None, shuffle=False, process_x_y=lambda X, Y: (X, Y)):
-        paths = glob.glob(os.path.join(data_dir, prefix + '*.h5*'))
-        files = [h5py.File(path) for path in paths]
+    def __init__(self, glob_str, batch_size=None, shuffle=False, process_x_y=lambda X, Y: (X, Y)):
+        files = [h5py.File(path) for path in glob(glob_str)]
         X, Y = zip(*[(file['data'][()], file['label'][()]) for file in files])
         X, Y = np.concatenate(X, axis=0), np.concatenate(Y, axis=0)
         X, Y = process_x_y(X, Y)
         super(H5pyBatchGenerator, self).__init__(X, Y, batch_size, shuffle)
+

@@ -32,29 +32,35 @@ parser.add_argument('-bs', '--batch-size', dest='batch_size', default=100, type=
                     help='Batch size in gradient-based training')
 args = parser.parse_args()
 
-
 if __name__ == '__main__':
     if not args.cpu:
         if not torch.cuda.is_available():
             print('GPU not available, switching to CPU')
             args.cpu = True
+    if args.debug:
+        args.epoch = 1
+        args.batch_size = 2
 
     util.makedirs(args.result_dir)
     shutil.copy(args.model_path, os.path.join(args.result_dir, 'model_def.py'))
     sys.path.append(args.result_dir)
     import model_def
 
+    best_config_dir = os.path.join(args.result_dir, 'best_config')
     if args.hyper:
-        train_generator = model_def.get_train_generator(args.data_path, args.batch_size)
-        val_generator = model_def.get_val_generator(args.data_path)
-        hb = Hyperband(model_def.get_config, model_def.get_model, args.result_dir,
-                       train_generator, val_generator, args.epoch, args)
-        best_config, best_result = hb.run()
-        best_config_name = util.get_config_name(best_config)
-        print('Best config: %s\n Result: %s' % (best_config_name, util.format_json(best_result)))
+        if os.path.islink(best_config_dir):
+            print('Best config %s already exists, skipping hyperparameter search' % (best_config_dir))
+        else:
+            train_generator = model_def.get_train_generator(args.data_path, args.batch_size)
+            val_generator = model_def.get_val_generator(args.data_path)
+            hb = Hyperband(model_def.get_config, model_def.get_model, args.result_dir,
+                        train_generator, val_generator, args.epoch, args)
+            best_config, best_result = hb.run()
+            best_config_name = util.get_config_name(best_config)
+            print('Best config:', best_config_name)
+            print(best_result.to_string(header=False))
 
-    if args.eval or args.predict:
-        best_config_dir = os.path.join(args.result_dir, 'best_config')
+    if args.eval or args.predict_path:
         best_config = util.load_json(os.path.join(best_config_dir, 'config.json'))
 
         model = model_def.get_model(best_config, best_config_dir, args)
@@ -64,9 +70,8 @@ if __name__ == '__main__':
         test_generator = model_def.get_test_generator(args.data_path)
 
         result = model.evaluate(test_generator)
-        print('Evaluation result', util.format_json(result))
-
-        util.save_json(result, os.path.join(best_config_dir, 'evaluation.json'))
+        print('Evaluation result:', util.format_json(result))
+        model.save_test_result(result)
 
     if args.predict_path: # TODO not sure how this is supposed to look like yet
         pred_generator = model_def.get_predict_generator(args.predict_path)

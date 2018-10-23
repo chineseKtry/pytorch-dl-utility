@@ -50,26 +50,30 @@ class Hyperband:
                 for config in T:
                     config_name = util.get_config_name(config)
 
+                    print('Training', config_name)
+
                     save_dir = os.path.join(self.result_dir, config_name)
                     model = self.get_model(config, save_dir, self.args)
 
                     if dry_run:
                         result = {'hyperband_reward': random.random()}
                     else:
-                        result = model.load_result(n_iterations)
+                        model.load_train_results()
+                        result = model.get_train_result(n_iterations)
                         if result is not None:
                             print('Loaded previous results')
+                            print(result.to_string(header=False, float_format='%.6g'))
                         else:
                             model.load()
                             model.fit(self.train_generator, self.val_generator, n_iterations)
                             model.save()
-                            result = model.load_result(n_iterations)
+                            model.save_train_results()
+                            result = model.get_train_result(n_iterations)
 
                             assert result is not None, 'Result for every epoch must be saved in the fit loop'
 
-                    assert 'hyperband_reward' in result, 'Result must be a dictionary containing the key "hyperband_reward"'
-                    result['name'] = config_name
-                    print(util.format_json(result))
+                    assert 'hyperband_reward' in result.index, 'Result must be a dictionary containing the key "hyperband_reward"'
+                    print()
                     results.append((config, result))
                     # TODO early stopping
                     t_counter.update()

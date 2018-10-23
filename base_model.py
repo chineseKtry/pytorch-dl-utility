@@ -18,18 +18,30 @@ class BaseModel(object):
     def __init__(self, config, save_dir, args):
         self.config = config
         self.args = args
+        self.device = 'cpu' if args.cpu else 'cuda'
+
         self.save_dir = save_dir
         self.model_dir = os.path.join(save_dir, 'models')
-        self.result_dir = os.path.join(save_dir, 'results')
-        for d in [self.save_dir, self.model_dir, self.result_dir]:
+        self.config_path = os.path.join(save_dir, 'config.json')
+        self.train_results_path = os.path.join(save_dir, 'train_results.csv')
+        self.test_result_path = os.path.join(save_dir, 'test_result.json')
+        for d in [self.save_dir, self.model_dir]:
             util.makedirs(d)
 
         self.epoch = 0
         self.save_config()
         self.init_model()
+        self.network.to(self.device)
 
-    def init_model(self):
-        raise NotImplementedError('Must override BaseModel.init_model')
+    def init_model(self, network, criterion, optimizer, constraints=[]):
+        self.network = network
+        self.criterion = criterion
+        self.optimizer = optimizer
+        self.constraints = constraints
+        if self.args.debug:
+            print(self.network)
+            print(self.criterion)
+            print(self.optimizer)
 
     def fit(self, train_generator, val_generator, stop_epoch):
         if self.epoch >= stop_epoch:
@@ -43,21 +55,22 @@ class BaseModel(object):
             self.epoch = epoch + 1
             start = time()
             t_results = pd.DataFrame([self.fit_batch(xy) for xy in train_generator])
-            epoch_result = t_results.mean(axis=0).add_prefix('train_').to_dict()
+            epoch_result = t_results.mean(axis=0).add_prefix('train_')
 
             if val_generator:
-                v_result = pd.Series(self.evaluate(val_generator)).add_prefix('val_').to_dict()
-                epoch_result.update(v_result)
+                v_result = pd.Series(self.evaluate(val_generator)).add_prefix('val_')
+                epoch_result = epoch_result.append(v_result)
             epoch_result['hyperband_reward'] = self.get_hyperband_reward(epoch_result)
             epoch_result['execution_time'] = '%.5g' % (time() - start)
-            print('Epoch %s: %s\n' % (self.epoch, util.format_json(epoch_result)))
+            
+            self.append_train_result(self.epoch, epoch_result)
+            print('Epoch %s:\n%s\n' % (self.epoch, epoch_result.to_string(header=False)))
 
-            epoch_result['epoch'] = self.epoch
-            self.save_result(epoch_result)
             e_counter.update()
         e_counter.close()
 
-    def forward(self, xy_t):
+    def forward(self, xy):
+        xy_t = map(lambda t: torch.from_numpy(t).to(self.device), xy)
         if len(xy_t) == 1:
             xy_t = xy_t + (None,)
         x_t, y_t = xy_t
@@ -73,15 +86,13 @@ class BaseModel(object):
         loss = self.criterion(y_pred_loss_t, y_t)
         return y_pred, loss
 
-    def forward_numpy(self, xy):
-        xy_t = map(torch.from_numpy, xy)
-        if not self.args.cpu:
-            xy_t = map(lambda t: t.cuda(), xy_t)
-        return self.forward(xy_t)
-
     def fit_batch(self, xy):
         self.network.train()
-        y_pred, loss = self.forward_numpy(xy)
+        y_pred, loss = self.forward(xy)
+
+        for module_name, module in self.network.named_modules():
+            for constraint in self.constraints:
+                constraint.apply(module_name, module)
 
         self.optimizer.zero_grad()
         loss.backward()
@@ -94,12 +105,12 @@ class BaseModel(object):
 
     def predict(self, generator):
         self.network.eval()
-        gpu = not self.args.cpu
         losses, y_preds = [], []
-        for xy in generator:
-            y_pred_batch, loss = self.forward_numpy(xy)
-            losses.append(loss.item())
-            y_preds.append(y_pred_batch)
+        with torch.no_grad():
+            for xy in generator:
+                y_pred_batch, loss = self.forward(xy)
+                losses.append(loss.item())
+                y_preds.append(y_pred_batch)
         y_pred = np.concatenate(y_preds, axis=0)
         if generator.get_Y() is None:
             return y_pred
@@ -148,28 +159,40 @@ class BaseModel(object):
         self.epoch = state['epoch']
         print('Loaded model from %s with %s iterations' % (save_path, epoch))
 
-    def save_result(self, result):  # TODO maybe change to csv or database format
-        util.save_json(result, os.path.join(self.result_dir, 'train-%s.json' % self.epoch))
-
-    def load_result(self, epoch):
-        result_path = os.path.join(self.result_dir, 'train-%s.json' % epoch)
-        if os.path.exists(result_path):
-            print('Loaded result for epoch %s at %s' % (epoch, result_path))
-            return util.load_json(result_path)
+    def load_train_results(self):
+        if os.path.exists(self.train_results_path):
+            self.train_results = pd.read_csv(self.train_results_path, index_col=0)
         else:
-            print('Could not find result for epoch %s at %s' % (epoch, result_path))
+            self.train_results = None
+        return self.train_results
+    
+    def save_train_results(self):
+        if self.train_results is not None:
+            self.train_results.to_csv(self.train_results_path, float_format='%.6g')
+    
+    def get_train_result(self, epoch):
+        if self.train_results is not None and epoch in self.train_results.index:
+            return self.train_results.loc[epoch]
+        else:
             return None
+    
+    def append_train_result(self, epoch, epoch_result):
+        if self.train_results is None:
+            self.train_results = pd.DataFrame([epoch_result], index=pd.Series([epoch], name='epoch'))
+        else:
+            self.train_results.loc[epoch] = epoch_result
+
+    def save_test_result(self, result):
+        util.save_json(result, self.test_result_path)
 
     def save_config(self):
-        util.save_json(self.config, os.path.join(self.save_dir, 'config.json'))
+        util.save_json(self.config, self.config_path)
 
 
 class ConvClassificationNetwork(nn.Module):
 
-    def __init__(self, features, classifier, gpu):
+    def __init__(self, features, classifier):
         super(ConvClassificationNetwork, self).__init__()
-        if gpu:
-            features, classifier = features.cuda(), classifier.cuda()
         self.features, self.classifier = features, classifier
 
     def forward(self, x):
@@ -184,13 +207,9 @@ class ConvClassificationNetwork(nn.Module):
 
 class ConvClassificationModel(BaseModel):
 
-    def init_model(self, network, optimizer):
-        config = self.config
-        gpu = not self.args.cpu
-        self.criterion = nn.CrossEntropyLoss()
-        self.network = network
-        self.optimizer = optimizer
-
+    def init_model(self, network, optimizer, constraints=[]):
+        super(ConvClassificationModel, self).init_model(network, nn.CrossEntropyLoss(), optimizer, constraints=constraints)
+        
     def train_metrics(self, y_true, y_pred):
         return {
             'accuracy': metrics.accuracy(y_true, y_pred)
@@ -203,4 +222,4 @@ class ConvClassificationModel(BaseModel):
         }
 
     def get_hyperband_reward(self, result):
-        return -result['val_loss']
+        return -result.loc['val_loss']
