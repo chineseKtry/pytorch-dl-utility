@@ -24,7 +24,7 @@ parser.add_argument('-m', '--model', dest='model_path',
                     help='Path to python file with PyTorch model')
 parser.add_argument('-d', '--data', dest='data_path', help='Data path or directory')
 parser.add_argument('-r', '--result', dest='result_dir', help='Result directory')
-parser.add_argument('-pi', '--predict', dest='predict_path', help='Prediction data path')
+parser.add_argument('-p', '--predict', dest='predict', help='Prediction input path')
 
 parser.add_argument('-ep', '--epoch', dest='epoch', type=int,
                     help='Number of epochs to train and hyperparameter tune for')
@@ -37,6 +37,7 @@ if __name__ == '__main__':
         if not torch.cuda.is_available():
             print('GPU not available, switching to CPU')
             args.cpu = True
+    
     if args.debug:
         args.epoch = 1
         args.batch_size = 2
@@ -51,30 +52,45 @@ if __name__ == '__main__':
         if os.path.islink(best_config_dir):
             print('Best config %s already exists, skipping hyperparameter search' % (best_config_dir))
         else:
-            train_generator = model_def.get_train_generator(args.data_path, args.batch_size)
-            val_generator = model_def.get_val_generator(args.data_path)
+            gen = model_def.get_train_generator(args.data_path, args.batch_size)
+            if type(gen) == tuple:
+                train_generator, val_generator = gen
+            else:
+                train_generator = gen
+                val_generator = model_def.get_val_generator(args.data_path)
             hb = Hyperband(model_def.get_config, model_def.get_model, args.result_dir,
                         train_generator, val_generator, args.epoch, args)
             best_config, best_result = hb.run()
             best_config_name = util.get_config_name(best_config)
             print('Best config:', best_config_name)
             print(best_result.to_string(header=False))
-
-    if args.eval or args.predict_path:
+    
+    def get_best_model():
         best_config = util.load_json(os.path.join(best_config_dir, 'config.json'))
-
         model = model_def.get_model(best_config, best_config_dir, args)
         model.load()
+        return model
 
     if args.eval:
-        test_generator = model_def.get_test_generator(args.data_path)
+        test_result_path = os.path.join(best_config_dir, 'test_result.json')
+        if os.path.exists(test_result_path):
+            result = util.load_json(test_result_path)
+            print('Loaded previous evaluation result:', util.format_json(result))
+        else:
+            model = get_best_model()
+            test_generator = model_def.get_test_generator(args.data_path)
+            result = model.evaluate(test_generator)
+            print('Evaluation result:', util.format_json(result))
+            model.save_test_result(result)
 
-        result = model.evaluate(test_generator)
-        print('Evaluation result:', util.format_json(result))
-        model.save_test_result(result)
-
-    if args.predict_path: # TODO not sure how this is supposed to look like yet
-        pred_generator = model_def.get_predict_generator(args.predict_path)
-
-        Y = model.predict(pred_generator)
-        model_def.save_prediction(Y, args.predict_path)
+    if args.predict:
+        pred_out = os.path.join(best_config_dir, args.predict)
+        if os.path.exists(pred_out):
+            print('Prediction already exist at %s' % pred_out)
+        else:
+            model = get_best_model()
+            pred_in = os.path.join(args.data_path, args.predict)
+            pred_generator = model_def.get_pred_generator(pred_in)
+            Y = model.predict(pred_generator)
+            np.save(pred_out, Y)
+            print('Saved predictions to %s' % pred_out)

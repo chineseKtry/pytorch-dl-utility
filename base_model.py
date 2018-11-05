@@ -72,7 +72,7 @@ class BaseModel(object):
     def forward(self, xy):
         xy_t = map(lambda t: torch.from_numpy(t).to(self.device), xy)
         if len(xy_t) == 1:
-            xy_t = xy_t + (None,)
+            xy_t = xy_t + [None]
         x_t, y_t = xy_t
         pred = self.network(x_t)
         if type(pred) == dict:
@@ -109,7 +109,7 @@ class BaseModel(object):
         with torch.no_grad():
             for xy in generator:
                 y_pred_batch, loss = self.forward(xy)
-                losses.append(loss.item())
+                losses.append(loss and loss.item())
                 y_preds.append(y_pred_batch)
         y_pred = np.concatenate(y_preds, axis=0)
         if generator.get_Y() is None:
@@ -223,3 +223,39 @@ class ConvClassificationModel(BaseModel):
 
     def get_hyperband_reward(self, result):
         return -result.loc['val_loss']
+
+
+class ConvRegressionNetwork(nn.Module):
+
+    def __init__(self, features, regressor):
+        super(ConvRegressionNetwork, self).__init__()
+        self.features, self.regressor = features, regressor
+
+    def forward(self, x):
+        x = self.features(x)
+        x = x.view(x.size(0), -1)
+        x = self.regressor(x)
+        return x[:, 0]
+
+
+class ConvRegressionModel(BaseModel):
+
+    def init_model(self, network, optimizer, constraints=[]):
+        super(ConvRegressionModel, self).init_model(network, nn.MSELoss(), optimizer, constraints=constraints)
+        
+    def train_metrics(self, y_true, y_pred):
+        return {
+            'mse': metrics.mse(y_true, y_pred)
+        }
+
+    def eval_metrics(self, y_true, y_pred):
+        return {
+            'mse': metrics.mse(y_true, y_pred),
+            'pearson': metrics.pearson(y_true, y_pred)
+        }
+
+    def get_hyperband_reward(self, result):
+        return -result.loc['val_loss']
+
+
+
