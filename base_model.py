@@ -205,10 +205,10 @@ class ConvClassificationNetwork(nn.Module):
         }
 
 
-class ConvClassificationModel(BaseModel):
+class ClassificationModel(BaseModel):
 
     def init_model(self, network, optimizer, constraints=[]):
-        super(ConvClassificationModel, self).init_model(network, nn.CrossEntropyLoss(), optimizer, constraints=constraints)
+        super(ClassificationModel, self).init_model(network, nn.CrossEntropyLoss(), optimizer, constraints=constraints)
         
     def train_metrics(self, y_true, y_pred):
         return {
@@ -238,10 +238,10 @@ class ConvRegressionNetwork(nn.Module):
         return x[:, 0]
 
 
-class ConvRegressionModel(BaseModel):
+class RegressionModel(BaseModel):
 
     def init_model(self, network, optimizer, constraints=[]):
-        super(ConvRegressionModel, self).init_model(network, nn.MSELoss(), optimizer, constraints=constraints)
+        super(RegressionModel, self).init_model(network, nn.MSELoss(), optimizer, constraints=constraints)
         
     def train_metrics(self, y_true, y_pred):
         return {

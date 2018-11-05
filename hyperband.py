@@ -10,9 +10,9 @@ import util
 
 class Hyperband:
 
-    def __init__(self, get_config, get_model, result_dir, train_generator, val_generator, max_iter, args, eta=3):
+    def __init__(self, get_config, model, result_dir, train_generator, val_generator, max_iter, args, eta=3):
         self.get_config = get_config
-        self.get_model = get_model
+        self.get_model = model
         self.result_dir = result_dir
         self.train_generator = train_generator
         self.val_generator = val_generator

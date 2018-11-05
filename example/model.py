@@ -18,17 +18,17 @@ def get_config():
 process_x_y = lambda X, Y: (X.astype(np.float32), Y[:, 1].astype(np.long))
 
 
-def get_train_generator(data_path, batch_size):
-    return H5pyBatchGenerator(data_path, 'train', batch_size=batch_size,
+def get_train_generator(data_dir, batch_size):
+    return H5pyBatchGenerator(data_dir, 'train', batch_size=batch_size,
                               shuffle=True, process_x_y=process_x_y)
 
 
-def get_val_generator(data_path, batch_size=None):
-    return H5pyBatchGenerator(data_path, 'valid', batch_size=batch_size, process_x_y=process_x_y)
+def get_val_generator(data_dir):
+    return H5pyBatchGenerator(data_dir, 'valid', process_x_y=process_x_y)
 
 
-def get_test_generator(data_path, batch_size=None):
-    return H5pyBatchGenerator(data_path, 'test', batch_size=batch_size, process_x_y=process_x_y)
+def get_test_generator(data_dir):
+    return H5pyBatchGenerator(data_dir, 'test', process_x_y=process_x_y)
 
 
 def get_model(config, save_dir, args):
