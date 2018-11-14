@@ -30,6 +30,9 @@ parser.add_argument('-ep', '--epoch', dest='epoch', type=int,
                     help='Number of epochs to train and hyperparameter tune for')
 parser.add_argument('-bs', '--batch-size', dest='batch_size', default=100, type=int,
                     help='Batch size in gradient-based training')
+parser.add_argument('-adv','--adversarial',dest='adversarial', default=False, action='store_true',
+                    help='Perform adversarial training')
+
 args = parser.parse_args()
 
 if __name__ == '__main__':
@@ -64,7 +67,19 @@ if __name__ == '__main__':
             best_config_name = util.get_config_name(best_config)
             print('Best config:', best_config_name)
             print(best_result.to_string(header=False))
-    
+
+    if args.adversarial:
+        model = get_best_model()
+        gen = model_def.get_adversarial_train_generator(args.data_dir, args.batch_size, model, nn.CrossEntropyLoss())        
+        if type(gen) == tuple:
+            train_generator, val_generator = gen
+        else:
+            train_generator = gen
+            val_generator = model_def.get_val_generator(args.data_dir)
+        model.fit(train_generator,val_generator, model.epoch + args.epoch)
+        model.save()
+        model.save_train_results()
+
     def get_best_model():
         best_config = util.load_json(os.path.join(best_config_dir, 'config.json'))
         model = model_def.Model(best_config, best_config_dir, args)
