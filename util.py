@@ -15,10 +15,6 @@ def makedirs(d):
         os.makedirs(d)
 
 
-def get_config_name(config):
-    return ','.join(sorted('%s=%s' % (k, v) for k, v in config.items()))
-
-
 def format_json(dict_):
     return json.dumps(dict_, indent=4, sort_keys=True)
 

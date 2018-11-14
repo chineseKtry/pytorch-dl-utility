@@ -59,7 +59,7 @@ class Model(base_model.BaseModel):
         :param y_pred: output of the network on a batch of inputs from the train data loader
         :returns: a dictionary mapping strings to scalar values
         """
-    
+
     def eval_metrics(self, y_true, y_pred):
         """
         Same as Model.train_metrics, but for validation and test
