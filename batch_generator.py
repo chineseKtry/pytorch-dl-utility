@@ -40,7 +40,7 @@ class MatrixBatchGenerator(object):
         return self.Y
     
     @classmethod
-    def get_train_val_generator(cls, X, Y, val_ratio, batch_size, shuffle=False):
+    def get_train_val_generator(cls, X, Y, val_ratio, batch_size):
         N = len(X)
         indices = np.random.permutation(N)
         X, Y = X[indices], Y[indices]

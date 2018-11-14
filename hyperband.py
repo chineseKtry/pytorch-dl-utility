@@ -5,6 +5,7 @@ import os
 import random
 import time
 
+from config import Config
 import util
 
 
@@ -36,7 +37,7 @@ class Hyperband:
             r = self.max_iter * self.eta ** (-s)
 
             # n random configurations
-            T = [self.get_config() for _ in range(n)]
+            T = [Config(self.result_dir, config_dict=self.get_config()) for _ in range(n)]
 
             i_counter = util.progress_manager.counter(total=s + 1, desc='s = %s. Sweeping i' % s, leave=False)
             for i in xrange(s + 1):
@@ -48,27 +49,20 @@ class Hyperband:
                 t_counter = util.progress_manager.counter(total=len(T), desc='i = %s. Sweeping configs' % i, leave=False)
                 results = []
                 for config in T:
-                    config_name = util.get_config_name(config)
+                    print('Training', config.name)
 
-                    print('Training', config_name)
-
-                    save_dir = os.path.join(self.result_dir, config_name)
-                    model = self.get_model(config, save_dir, self.args)
-
+                    model = self.get_model(config, self.args)
                     if dry_run:
                         result = {'hyperband_reward': random.random()}
                     else:
-                        model.load_train_results()
-                        result = model.get_train_result(n_iterations)
+                        result = config.get_train_result(n_iterations)
+
                         if result is not None:
                             print('Loaded previous results')
                             print(result.to_string(header=False, float_format='%.6g'))
                         else:
-                            model.load()
                             model.fit(self.train_generator, self.val_generator, n_iterations)
-                            model.save()
-                            model.save_train_results()
-                            result = model.get_train_result(n_iterations)
+                            result = config.get_train_result(n_iterations)
 
                             assert result is not None, 'Result for every epoch must be saved in the fit loop'
 
@@ -91,14 +85,7 @@ class Hyperband:
 
         s_counter.close()
         util.progress_manager.stop()
-
-        return self.select_best_result()
-
-    def select_best_result(self):
+        
         best_config, best_result = max(self.all_results, key=lambda (config, result): result['hyperband_reward'])
-        best_config_name = util.get_config_name(best_config)
-        best_config_link = os.path.join(self.result_dir, 'best_config')
-        if os.path.islink(best_config_link):
-            os.remove(best_config_link)
-        os.symlink(best_config_name, best_config_link)
+        best_config.link_as_best()
         return best_config, best_result

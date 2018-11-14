@@ -1,4 +1,3 @@
-from glob import glob
 import os
 import re
 from time import time
@@ -9,27 +8,19 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+from config import Config
 import metrics
 import util
 
 
 class BaseModel(object):
 
-    def __init__(self, config, save_dir, args):
+    def __init__(self, config, args):
         self.config = config
         self.args = args
         self.device = 'cpu' if args.cpu else 'cuda'
 
-        self.save_dir = save_dir
-        self.model_dir = os.path.join(save_dir, 'models')
-        self.config_path = os.path.join(save_dir, 'config.json')
-        self.train_results_path = os.path.join(save_dir, 'train_results.csv')
-        self.test_result_path = os.path.join(save_dir, 'test_result.json')
-        for d in [self.save_dir, self.model_dir]:
-            util.makedirs(d)
-
         self.epoch = 0
-        self.save_config()
         self.init_model()
         self.network.to(self.device)
 
@@ -44,12 +35,13 @@ class BaseModel(object):
             print(self.optimizer)
 
     def fit(self, train_generator, val_generator, stop_epoch):
+        self.load()
         if self.epoch >= stop_epoch:
             print('Already completed %s epochs' % self.epoch)
             return
-
+        
         e_counter = util.progress_manager.counter(
-            total=stop_epoch, desc='%s. Epoch' % util.get_config_name(self.config), unit='epoch', leave=False)
+            total=stop_epoch, desc='%s. Epoch' % self.config.name, unit='epoch', leave=False)
         e_counter.update(self.epoch)
         for epoch in xrange(self.epoch, stop_epoch):
             self.epoch = epoch + 1
@@ -63,11 +55,13 @@ class BaseModel(object):
             epoch_result['hyperband_reward'] = self.get_hyperband_reward(epoch_result)
             epoch_result['execution_time'] = '%.5g' % (time() - start)
             
-            self.append_train_result(self.epoch, epoch_result)
+            self.config.put_train_result(self.epoch, epoch_result)
             print('Epoch %s:\n%s\n' % (self.epoch, epoch_result.to_string(header=False)))
 
             e_counter.update()
         e_counter.close()
+        self.save()
+        self.config.save_train_results()
 
     def forward(self, xy):
         xy_t = map(lambda t: torch.from_numpy(t).to(self.device), xy)
@@ -138,55 +132,21 @@ class BaseModel(object):
             'network': self.network.state_dict(),
             'optimizer': self.optimizer.state_dict()
         }
-        save_path = os.path.join(self.model_dir, 'model-%s.pth' % self.epoch)
-        torch.save(state, save_path)
-        return save_path
-
-    def load(self):
-        save_paths = glob(os.path.join(self.model_dir, 'model-*.pth'))
-        if len(save_paths) == 0:
-            print('No saved model found in %s' % self.model_dir)
-            return
-        extract_epoch = lambda path: int(re.match('.+/model-(\d+)\.pth', path).groups()[0])
-        save_path = max(save_paths, key=extract_epoch)
-        epoch = extract_epoch(save_path)
-        if epoch == self.epoch:
-            print('Model already at epoch %s, no need to load' % self.epoch)
-            return
-        state = torch.load(save_path)
+        return self.config.save_model_state(self.epoch, state)
+        
+    def load(self, epoch=None):
+        if epoch is not None: # load a specific epoch
+            state = self.config.load_model_state(epoch)
+            assert state is not None, 'Epoch %s for model is not saved' % epoch
+        else:
+            state, epoch = self.config.load_best_model_state()
+            if not state:
+                return self
         self.network.load_state_dict(state['network'])
         self.optimizer.load_state_dict(state['optimizer'])
         self.epoch = state['epoch']
-        print('Loaded model from %s with %s iterations' % (save_path, epoch))
-
-    def load_train_results(self):
-        if os.path.exists(self.train_results_path):
-            self.train_results = pd.read_csv(self.train_results_path, index_col=0)
-        else:
-            self.train_results = None
-        return self.train_results
-    
-    def save_train_results(self):
-        if self.train_results is not None:
-            self.train_results.to_csv(self.train_results_path, float_format='%.6g')
-    
-    def get_train_result(self, epoch):
-        if self.train_results is not None and epoch in self.train_results.index:
-            return self.train_results.loc[epoch]
-        else:
-            return None
-    
-    def append_train_result(self, epoch, epoch_result):
-        if self.train_results is None:
-            self.train_results = pd.DataFrame([epoch_result], index=pd.Series([epoch], name='epoch'))
-        else:
-            self.train_results.loc[epoch] = epoch_result
-
-    def save_test_result(self, result):
-        util.save_json(result, self.test_result_path)
-
-    def save_config(self):
-        util.save_json(self.config, self.config_path)
+        print('Loaded model from %s with %s iterations' % (self.config.model_dir, epoch))
+        return self
 
 
 class ConvClassificationNetwork(nn.Module):
