@@ -70,13 +70,19 @@ if __name__ == '__main__':
             print(best_result.to_string(header=False))
 
     if args.adversarial:
-        model = get_best_model()
-        gen = model_def.get_adversarial_train_generator(args.data_dir, args.batch_size, model, nn.CrossEntropyLoss())        
+        # start from trained model
+        model = model_def.Model(best_config, args).load()
+
+        # start from randomly initialized model
+        model = model_def.Model()
+
+        gen = model_def.get_adversarial_train_generator(args.data_dir, args.batch_size, model)        
         if type(gen) == tuple:
             train_generator, val_generator = gen
         else:
             train_generator = gen
             val_generator = model_def.get_val_generator(args.data_dir)
+
         model.fit(train_generator,val_generator, model.epoch + args.epoch)
         model.save()
         model.save_train_results()
