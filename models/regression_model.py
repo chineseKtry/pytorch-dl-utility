@@ -1,4 +1,6 @@
-from base_model import BaseModel
+from __future__ import print_function, absolute_import
+
+from models.base_model import BaseModel
 import metrics
 
 class RegressionModel(BaseModel):

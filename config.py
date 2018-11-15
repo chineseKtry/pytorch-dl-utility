@@ -1,3 +1,5 @@
+from __future__ import print_function, absolute_import
+
 from glob import glob
 import re
 import os
@@ -70,7 +72,7 @@ class Config:
         if len(save_paths) == 0:
             return []
         extract_epoch = lambda path: int(re.match('.+/model-(\d+)\.pth', path).groups()[0])
-        return map(extract_epoch, save_paths)
+        return [extract_epoch(p) for p in save_paths]
 
     def load_max_model_state(self, curr_epoch=0):
         epochs = self._get_saved_model_epochs()

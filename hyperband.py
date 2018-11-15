@@ -1,4 +1,5 @@
-from __future__ import print_function
+from __future__ import print_function, absolute_import
+from six.moves import range
 
 import math
 import os
@@ -28,7 +29,7 @@ class Hyperband:
 
     def run(self, dry_run=False):
         s_counter = util.progress_manager.counter(total=self.s_max + 1, desc='Sweeping s', leave=False)
-        for s in reversed(xrange(self.s_max + 1)):
+        for s in reversed(range(self.s_max + 1)):
 
             # initial number of configurations
             n = int(math.ceil(self.B / self.max_iter / (s + 1) * self.eta ** s))
@@ -40,7 +41,7 @@ class Hyperband:
             T = [Config(self.result_dir, config_dict=self.get_config()) for _ in range(n)]
 
             i_counter = util.progress_manager.counter(total=s + 1, desc='s = %s. Sweeping i' % s, leave=False)
-            for i in xrange(s + 1):
+            for i in range(s + 1):
                 # Run each of the n configs for <iterations>
                 # and keep best (n_configs / eta) configurations
                 n_configs = n * self.eta ** (-i)
@@ -68,12 +69,16 @@ class Hyperband:
 
                     assert 'hyperband_reward' in result.index, 'Result must be a dictionary containing the key "hyperband_reward"'
                     print()
-                    results.append((config, result))
+                    results.append({
+                        'config': config,
+                        'epochs': n_iterations,
+                        'result': result
+                    })
                     # TODO early stopping
                     t_counter.update()
 
                 # select a number of best configurations for the next loop
-                results = sorted(results, key=lambda (config, result): result['hyperband_reward'], reverse=True)
+                results = sorted(results, key=lambda result: result['result']['hyperband_reward'], reverse=True)
                 T = [config for config, result in results[: int(n_configs / self.eta)]]
                 self.all_results.extend(results)
 
@@ -86,6 +91,6 @@ class Hyperband:
         s_counter.close()
         util.progress_manager.stop()
         
-        best_config, best_result = max(self.all_results, key=lambda (config, result): result['hyperband_reward'])
-        best_config.link_as_best()
-        return best_config, best_result
+        best_result = max(self.all_results, key=lambda result: result['result']['hyperband_reward'])
+        best_result['config'].link_as_best()
+        return best_result

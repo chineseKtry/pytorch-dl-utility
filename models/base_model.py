@@ -1,3 +1,6 @@
+from __future__ import print_function, absolute_import
+from six.moves import range
+
 import os
 import re
 from time import time
@@ -39,7 +42,7 @@ class BaseModel(object):
         e_counter = util.progress_manager.counter(
             total=stop_epoch, desc='%s. Epoch' % self.config.name, unit='epoch', leave=False)
         e_counter.update(self.epoch)
-        for epoch in xrange(self.epoch, stop_epoch):
+        for epoch in range(self.epoch, stop_epoch):
             self.epoch = epoch + 1
             start = time()
             t_results = pd.DataFrame([self.fit_batch(xy) for xy in train_gen])
@@ -70,7 +73,7 @@ class BaseModel(object):
         if type(t) == dict:
             return { k: self.from_torch(v) for k, v in t.items() if v is not None }
         elif type(t) in [list, tuple]:
-            return [self.from_torch(v) for v in x]
+            return [self.from_torch(v) for v in t]
         
         x = t.detach().cpu().numpy()
         if x.size == 1:
@@ -104,7 +107,7 @@ class BaseModel(object):
     def evaluate(self, gen):
         self.network.eval()
         with torch.no_grad():
-            preds = [self.from_torch(self.network(*self.to_torch(xy))) for xy in gen]
+            preds = [self.from_torch(self.network(*self.to_torch(xy))[1]) for xy in gen]
         return self.eval_metrics(gen.get_Y(), self.reduce_preds(preds))
 
     def predict(self, gen):

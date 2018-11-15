@@ -1,3 +1,5 @@
+from future.utils import implements_iterator
+
 from glob import glob
 import h5py
 import os
@@ -7,6 +9,7 @@ import numpy as np
 import torch
 from torch.utils import data
 
+@implements_iterator
 class MatrixBatchGenerator(object):
 
     def __init__(self, X, Y=None, batch_size=None, shuffle=False):
@@ -23,7 +26,7 @@ class MatrixBatchGenerator(object):
         self.i = 0
         return self
 
-    def next(self):
+    def __next__(self):
         if self.i >= self.N:
             raise StopIteration
         start = self.i

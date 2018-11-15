@@ -17,7 +17,7 @@ def format_json(dict_):
 
 
 def load_json(path):
-    with open(path, 'rb') as f:
+    with open(path, 'r+') as f:
         return json.load(f)
 
 

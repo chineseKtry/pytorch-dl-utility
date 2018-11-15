@@ -1,4 +1,5 @@
-from __future__ import print_function
+from __future__ import print_function, absolute_import
+
 import argparse
 from glob import glob
 import numpy as np
@@ -62,9 +63,11 @@ if __name__ == '__main__':
                 val_generator = model_def.get_val_generator(args.data_dir)
             hb = Hyperband(model_def.get_config, model_def.Model, args.result_dir,
                         train_generator, val_generator, args.epoch, args)
-            best_config, best_result = hb.run()
+            best_result = hb.run()
+            best_config = best_result['config']
             print('Best config:', best_config.name)
-            print(best_result.to_string(header=False))
+            print('Iterations:', best_result['epochs'])
+            print(best_result['result'].to_string(header=False))
 
     if args.eval:
         result = best_config.load_test_result()
@@ -81,7 +84,8 @@ if __name__ == '__main__':
         pred_in_glob = os.path.join(args.data_dir, args.pred_subpath)
         model = model_def.Model(best_config, args).load()
         for pred_in in glob(pred_in_glob):
-            pred_out = os.path.join(best_config.save_dir, pred_in.replace(args.data_dir + '/', '')) + '.npy'
+            subpath = pred_in.replace(args.data_dir, '').lstrip('/')
+            pred_out = os.path.join(best_config.save_dir, subpath) + '.npy'
             if os.path.exists(pred_out):
                 print('Prediction already exist at %s' % pred_out)
             else:
