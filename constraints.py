@@ -14,7 +14,7 @@ class MaxNormConstraint(ModuleMatcher):
         self.max_norm = max_norm
     
     def apply(self, module_name, module):
-        if self.match_name(module_name) and hasattr(module, 'weight'):
+        if self.match_name(module_name) and hasattr(module, 'weight') and module.weight is not None:
             param = module.weight
             norm = param.norm(2, dim=0, keepdim=True)
             desired = torch.clamp(norm, 0, self.max_norm)

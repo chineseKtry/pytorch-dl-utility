@@ -29,7 +29,7 @@ class MatrixBatchGenerator(object):
         start = self.i
         self.i += self.batch_size
         if self.Y is None:
-            return (self.X[start: self.i],)
+            return self.X[start: self.i]
         else:
             return (self.X[start: self.i], self.Y[start: self.i])
 
