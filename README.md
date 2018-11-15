@@ -121,3 +121,23 @@ See `constaints.py` for definitions. In general constraints apply to all layers 
 
 #### MaxNormConstraint
 Applies a max norm constraint.
+
+## Examples
+Some examples can be found in the `examples/` subdirectory.
+
+### conv_seq_classifier
+#### Preprocessing
+```bash
+cd examples/conv_seq_classifier
+mkdir data
+for dtype in 'train' 'valid' 'test'
+do
+	paste - - -d' ' < raw_data/$dtype.fa > data/tmp.tsv
+	python embedH5.py data/tmp.tsv raw_data/$dtype.target data/$dtype.h5
+done
+```
+
+#### Running Model
+```bash
+python ../../main.py -f conv_model.py -d data -r results -y -e -p test.h5.batch* -ep 20 -bs 100
+```

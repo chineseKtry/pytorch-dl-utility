@@ -102,7 +102,7 @@ if __name__ == '__main__':
         pred_in_glob = os.path.join(args.data_dir, args.pred_subpath)
         model = model_def.Model(best_config, args).load()
         for pred_in in glob(pred_in_glob):
-            pred_out = os.path.join(best_config.save_dir, pred_in.replace(args.data_dir, '')) + '.npy'
+            pred_out = os.path.join(best_config.save_dir, pred_in.replace(args.data_dir + '/', '')) + '.npy'
             if os.path.exists(pred_out):
                 print('Prediction already exist at %s' % pred_out)
             else:
