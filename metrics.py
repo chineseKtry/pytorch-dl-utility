@@ -11,8 +11,8 @@ def auroc(y, y_pred):
 
 
 def mse(y, y_pred):
-    return metrics.mean_squared_error(y, y_pred).astype(np.float64)
+    return metrics.mean_squared_error(y, y_pred)
 
 
 def pearson(y, y_pred):
-    return scipy.stats.pearsonr(y, y_pred)[0].astype(np.float64)
+    return scipy.stats.pearsonr(y, y_pred)[0]

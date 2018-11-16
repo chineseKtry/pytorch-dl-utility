@@ -133,11 +133,17 @@ mkdir data
 for dtype in 'train' 'valid' 'test'
 do
 	paste - - -d' ' < raw_data/$dtype.fa > data/tmp.tsv
-	python embedH5.py data/tmp.tsv raw_data/$dtype.target data/$dtype.h5
+	python3 embedH5.py data/tmp.tsv raw_data/$dtype.target data/$dtype.h5
 done
 ```
 
 #### Running Model
 ```bash
-python ../../main.py -f conv_model.py -d data -r results -y -e -p test.h5.batch* -ep 20 -bs 100
+python3 ../../main.py -f conv_model.py -d data -r results -y -e -p test.h5.batch* -ep 20 -bs 100
+```
+
+### function_regressor
+#### Running Model
+```bash
+python3 ../../main.py -f reg_model.py -d data -r results -y -e -p X_pred.csv -ep 50 -bs 100
 ```

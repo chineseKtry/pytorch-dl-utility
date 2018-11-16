@@ -79,7 +79,7 @@ class Hyperband:
 
                 # select a number of best configurations for the next loop
                 results = sorted(results, key=lambda result: result['result']['hyperband_reward'], reverse=True)
-                T = [config for config, result in results[: int(n_configs / self.eta)]]
+                T = [result['config'] for result in results[: int(n_configs / self.eta)]]
                 self.all_results.extend(results)
 
                 t_counter.close()

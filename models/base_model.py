@@ -76,7 +76,7 @@ class BaseModel(object):
             return [self.from_torch(v) for v in t]
         
         x = t.detach().cpu().numpy()
-        if x.size == 1:
+        if x.size == 1 or np.isscalar(x):
             return np.asscalar(x)
         return x
 

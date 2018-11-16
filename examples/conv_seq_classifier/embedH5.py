@@ -1,10 +1,14 @@
+from __future__ import print_function
 import argparse,pwd,os,numpy as np,h5py
 from os.path import splitext,exists,dirname,join,basename
 from os import makedirs
-from itertools import izip
+try:
+    import itertools.izip as zip
+except ImportError:
+    pass
 
 def outputHDF5(data,label,filename,labelname,dataname):
-    print 'data shape: ',data.shape
+    print('data shape: ',data.shape)
     comp_kwargs = {'compression': 'gzip', 'compression_opts': 1}
     #label = [[x.astype(np.float32)] for x in label]
     with h5py.File(filename, 'w') as f:
@@ -44,13 +48,13 @@ def convert(infile,labelfile,outfile,mapper,worddim,batchsize,labelname,dataname
         seqdata = []
         label = []
         batchnum = 0
-        for x,y in izip(seqfile,labelfile):
+        for x,y in zip(seqfile,labelfile):
             if isseq:
                 seqdata.append(list(x.strip().split()[1]))
             else:
-                seqdata.append(map(float,x.strip().split()))
+                seqdata.append(list(map(float,x.strip().split())))
             #label.append(float(y.strip()))
-            label.append(map(float,y.strip().split()))
+            label.append(list(map(float,y.strip().split())))
             cnt = (cnt+1)% batchsize
             if cnt == 0:
                 batchnum = batchnum + 1
@@ -82,11 +86,11 @@ def convert_siamese(infile1,infile2,labelfile,outfile,mapper,worddim,batchsize,l
         seqdata2 = []
         label = []
         batchnum = 0
-        for x1,x2,y in izip(seqfile1,seqfile2,labelfile):
+        for x1,x2,y in zip(seqfile1,seqfile2,labelfile):
             seqdata1.append(list(x1.strip().split()[1]))
             seqdata2.append(list(x2.strip().split()[1]))
             #label.append(float(y.strip()))
-            label.append(map(float,y.strip().split()))
+            label.append(list(map(float,y.strip().split())))
             cnt = (cnt+1)% batchsize
             if cnt == 0:
                 batchnum = batchnum + 1
@@ -155,7 +159,7 @@ if __name__ == "__main__":
                 vec = [float(item) for item in line[1:]]
                 args.mapper[word] = vec
     if args.infile2 == '':
-        print args.isseq =='Y'
+        print(args.isseq =='Y')
         batchnum = convert(args.infile,args.labelfile,args.outfile,args.mapper,len(args.mapper['A']),args.batch,args.labelname,args.dataname,args.isseq=='Y')
     else:
         batchnum = convert_siamese(args.infile,args.infile2,args.labelfile,args.outfile,args.mapper,len(args.mapper['A']),args.batch,args.labelname,args.dataname)
