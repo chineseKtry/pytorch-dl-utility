@@ -9,6 +9,11 @@ In general, the user needs to define three components in a python file (without 
 
 It's also recommended that the user create a data directory `data_dir` where all the data resides.
 
+## Install
+```bash
+pip install -r requirements.txt
+```
+
 ## Run
 ```
 python main.py [--help] --model def.py [--hyper] [--eval] [--debug] [--cpu] --data data_dir --result result_dir --predict pred_subpath --epoch num_epochs --batch-size training_batch_size
@@ -151,17 +156,17 @@ mkdir data
 for dtype in 'train' 'valid' 'test'
 do
 	paste - - -d' ' < raw_data/$dtype.fa > data/tmp.tsv
-	python3 embedH5.py data/tmp.tsv raw_data/$dtype.target data/$dtype.h5
+	python embedH5.py data/tmp.tsv raw_data/$dtype.target data/$dtype.h5
 done
 ```
 
 #### Running Model
 ```bash
-python3 ../../main.py -f conv_model.py -d data -r results -y -e -p test.h5.batch* -ep 20 -bs 100
+python ../../main.py -f conv_model.py -d data -r results -y -e -p test.h5.batch* -ep 20 -bs 100
 ```
 
 ### function_regressor
 #### Running Model
 ```bash
-python3 ../../main.py -f reg_model.py -d data -r results -y -e -p X_pred.csv -ep 50 -bs 100
+python ../../main.py -f reg_model.py -d data -r results -y -e -p X_pred.csv -ep 50 -bs 100
 ```
