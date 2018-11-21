@@ -35,6 +35,11 @@ parser.add_argument('-bs', '--batch-size', dest='batch_size', default=100, type=
                     help='Batch size in gradient-based training')
 args = parser.parse_args()
 
+def import_model(path):
+    import imp
+    model_def = imp.load_source('model', path)
+    return model_def
+
 if __name__ == '__main__':
     if not args.cpu:
         if not torch.cuda.is_available():
@@ -47,8 +52,7 @@ if __name__ == '__main__':
 
     util.makedirs(args.result_dir)
     shutil.copy(args.model_path, os.path.join(args.result_dir, 'model_def.py'))
-    sys.path.append(args.result_dir)
-    import model_def
+    model_def = import_model(args.model_path)
 
     best_config = Config(args.result_dir, from_best=True)
     if args.hyper:
