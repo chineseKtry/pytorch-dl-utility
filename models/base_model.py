@@ -10,6 +10,7 @@ import pandas as pd
 import torch
 
 from config import Config
+from matchers import apply_matchers
 import util
 
 
@@ -24,10 +25,11 @@ class BaseModel(object):
         self.init_model()
         self.network.to(self.device)
 
-    def init_model(self, network, optimizer, constraints=[]):
+    def init_model(self, network, optimizer, initializers=[], constraints=[]):
         self.network = network
         self.optimizer = optimizer
         self.constraints = constraints
+        apply_matchers(self.network.named_modules(), initializers)
         if self.args.debug:
             print(self.network)
             print(self.optimizer)
@@ -87,9 +89,7 @@ class BaseModel(object):
         loss_t.backward()
         self.optimizer.step()
         
-        for module_name, module in self.network.named_modules():
-            for constraint in self.constraints:
-                constraint.apply(module_name, module)
+        apply_matchers(self.network.named_modules(), self.constraints)
         _, y = xy
         return self.train_metrics(y, self.from_torch(pred_t))
     
