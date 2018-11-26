@@ -33,6 +33,8 @@ parser.add_argument('-ep', '--epoch', dest='epoch', type=int,
                     help='Number of epochs to train and hyperparameter tune for')
 parser.add_argument('-bs', '--batch-size', dest='batch_size', default=100, type=int,
                     help='Batch size in gradient-based training')
+parser.add_argument('-es', '--early-stopping', dest='early_stopping', default=False, action='store_true',
+                    help='Whether to stop early after a number of iterations with no improvement')
 args = parser.parse_args()
 
 def import_model(path):

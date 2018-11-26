@@ -34,17 +34,26 @@ class BaseModel(object):
             print(self.network)
             print(self.optimizer)
 
-    def fit(self, train_gen, val_gen, stop_epoch):
+    def fit(self, train_gen, val_gen, stop_epoch, early_stopping=False):
+        config = self.config
         self.load()
         if self.epoch >= stop_epoch:
             print('Already completed %s epochs' % self.epoch)
             return
         
         self.network.train()
+        
         e_counter = util.progress_manager.counter(
-            total=stop_epoch, desc='%s. Epoch' % self.config.name, unit='epoch', leave=False)
+            total=stop_epoch, desc='%s. Epoch' % config.name, unit='epoch', leave=False)
         e_counter.update(self.epoch)
+        stopped_early = False
         for epoch in range(self.epoch, stop_epoch):
+            if early_stopping and self.epoch > 3:
+                results = config.load_train_results().iloc[-4:]
+                if results['hyperband_reward'].idxmax() == results.index[0]:
+                    stopped_early = True
+                    break
+
             self.epoch = epoch + 1
             start = time()
             t_results = pd.DataFrame([self.fit_batch(xy) for xy in train_gen])
@@ -56,13 +65,14 @@ class BaseModel(object):
             epoch_result['hyperband_reward'] = self.get_hyperband_reward(epoch_result)
             epoch_result['execution_time'] = '%.5g' % (time() - start)
             
-            self.config.put_train_result(self.epoch, epoch_result)
+            config.put_train_result(self.epoch, epoch_result)
             print('Epoch %s:\n%s\n' % (self.epoch, epoch_result.to_string(header=False)))
 
             e_counter.update()
         e_counter.close()
         self.save()
-        self.config.save_train_results()
+        config.save_train_results()
+        return self.epoch, epoch_result, stopped_early
     
     def to_torch(self, x):
         if type(x) == dict:

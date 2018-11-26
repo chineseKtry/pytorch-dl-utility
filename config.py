@@ -91,7 +91,7 @@ class Config:
         if len(epochs) == 0:
             print('No saved model found in %s' % self.model_dir)
             return {}, 0
-        epoch = self.train_results.loc[epochs, metric].idxmax()
+        epoch = self.train_results.reindex(epochs)[metric].idxmax()
         return self.load_model_state(epoch), epoch
 
 
