@@ -35,9 +35,9 @@ class MatrixBatchGenerator(object):
             return self.X[start: self.i]
         else:
             return (self.X[start: self.i], self.Y[start: self.i])
-
-    def get_X_shape(self):
-        return self.X.shape[1:]
+    
+    def get_X(self):
+        return self.X
 
     def get_Y(self):
         return self.Y

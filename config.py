@@ -1,133 +1,142 @@
-from __future__ import print_function, absolute_import
-
-from glob import glob
 import re
-import os
 
 import pandas as pd
 import torch
 
-import util
+from util import numpy_to_builtin, load_json, save_json, save_text, Path
 
-class Config:
-    def __init__(self, result_dir, from_best=False, config_name='', config_dict={}):
-        self.result_dir = result_dir
+class Config(object):
+
+    def __init__(self, res, params):
+        self.res = Path(res).mk()
+        self.params = self.load_params() if self.path.exists() else params
+        self.name = res._real._name
         
-        self.best_dir = os.path.join(self.result_dir, 'best_config')
-        if from_best:
-            best_config_path = os.path.join(self.best_dir, 'config.json')
-            if os.path.exists(best_config_path):
-                config_dict = util.load_json(best_config_path)
+        if not self.path.exists():
+            self.save()
 
-        self.params = config_dict
-        self.name = config_name
-        if config_dict:
-            self.name = ','.join(sorted('%s=%s' % (k, v) for k, v in config_dict.items()))
-        if not self.name: # empty config
-            return
+    @property
+    def __eq__(self, other):
+        return self.path._ == other
 
-        self.save_dir = os.path.join(self.result_dir, self.name)
-
-        self.model_dir = os.path.join(self.save_dir, 'models')
-        self.config_path = os.path.join(self.save_dir, 'config.json')
-        self.train_results_path = os.path.join(self.save_dir, 'train_results.csv')
-        self.test_result_path = os.path.join(self.save_dir, 'test_result.json')
-        for d in [self.save_dir, self.model_dir]:
-            util.makedirs(d)
-        
-        self.save_config()
-
-        self.train_results = None
+    @property
+    def path(self):
+        return self.res / 'config.json'
     
-
-    # best config directory link
-    def exist_best(self):
-        return os.path.islink(self.best_dir)
-    
-    def link_as_best(self):
-        if os.path.islink(self.best_dir):
-            os.remove(self.best_dir)
-        os.symlink(self.name, self.best_dir)
-    
-
-    # config file
-    def save_config(self):
-        util.save_json(self.params, self.config_path)
-    
-
-    # model files
-    def save_model_state(self, epoch, state):
-        save_path = os.path.join(self.model_dir, 'model-%s.pth' % epoch)
-        torch.save(state, save_path)
-        return save_path
-    
-    def load_model_state(self, epoch):
-        save_path = os.path.join(self.model_dir, 'model-%s.pth' % epoch)
-        if not os.path.exists(save_path):
+    @classmethod
+    def from_path(cls, path):
+        if Path(path).exists():
+            args = load_json(path)
+            return cls(args['result'], args['params'])
+        else:
             return None
-        return torch.load(save_path)
     
-    def _get_saved_model_epochs(self):
-        save_paths = glob(os.path.join(self.model_dir, 'model-*.pth'))
-        if len(save_paths) == 0:
-            return []
-        extract_epoch = lambda path: int(re.match('.+/model-(\d+)\.pth', path).groups()[0])
-        return [extract_epoch(p) for p in save_paths]
-
-    def load_max_model_state(self, curr_epoch=0):
-        epochs = self._get_saved_model_epochs()
-        if len(epochs) == 0:
-            print('No saved model found in %s' % self.model_dir)
-            return {}, 0
-        epoch = max(epochs)
-        if curr_epoch >= epoch:
-            print('Model is already at epoch %s, no need to load' % curr_epoch)
-            return {}, 0
-        return self.load_model_state(epoch), epoch
+    def load_params(self):
+        return load_json(self.path)['params']
     
-    def load_best_model_state(self, metric='hyperband_reward'):
-        self.load_train_results()
-        epochs = self._get_saved_model_epochs()
-        if len(epochs) == 0:
-            print('No saved model found in %s' % self.model_dir)
-            return {}, 0
-        epoch = self.train_results.reindex(epochs)[metric].idxmax()
-        return self.load_model_state(epoch), epoch
+    def save(self, force=False):
+        if not force and self.path.exists():
+            print('Not saving config %s, already exists and "force" is not specified' % self.path)
+        else:
+            save_json(self.path, dict(result=self.res, params=numpy_to_builtin(self.params)))
 
 
-    # training results
+    @property
+    def train_results(self):
+        return self.res / 'train_results.csv'
+    
     def load_train_results(self):
-        if self.train_results is not None:
-            return self.train_results
-        elif os.path.exists(self.train_results_path):
-            self.train_results = pd.read_csv(self.train_results_path, index_col=0)
-            return self.train_results
-        else:
-            return None
-    
-    def save_train_results(self):
-        self.train_results.to_csv(self.train_results_path, float_format='%.6g')
-    
-    def get_train_result(self, epoch):
-        self.load_train_results()
-        if self.train_results is not None and epoch in self.train_results.index:
-            return self.train_results.loc[epoch]
-        else:
-            return None
-    
-    def put_train_result(self, epoch, epoch_result):
-        self.load_train_results()
-        if self.train_results is None:
-            self.train_results = pd.DataFrame([epoch_result], index=pd.Series([epoch], name='epoch'))
-        else:
-            self.train_results.loc[epoch] = epoch_result
+        if self.train_results.exists():
+            return pd.read_csv(self.train_results, index_col=0)
+        return None
+
+    def save_train_results(self, results):
+        results.to_csv(self.train_results, float_format='%.6g')
 
 
-    # test results
-    def save_test_result(self, result):
-        util.save_json(result, self.test_result_path)
+    @property
+    def test_result(self):
+        return self.res / 'test_result.json'
 
     def load_test_result(self):
-        if not os.path.exists(self.test_result_path):
+        if self.test_result.exists():
+            return load_json(self.test_result)
+        return None
+
+    def save_test_result(self, result):
+        save_json(self.test_result, numpy_to_builtin(result))
+
+
+    @property
+    def best_reward(self):
+        return self.res / 'best_reward.json'
+    
+    def save_best_reward(self, reward, epoch):
+        save_json(self.best_reward, dict(reward=reward, epoch=epoch))
+    
+    def load_best_reward(self):
+        if self.best_reward.exists():
+            reward_dict = load_json(self.best_reward)
+            return reward_dict['reward'], reward_dict['epoch']
+        return None
+
+
+    @property
+    def stopped_early(self):
+        return self.res / 'stopped_early'
+    
+    def set_stopped_early(self):
+        save_text(self.stopped_early, '')
+
+    
+    @property
+    def models(self):
+        return (self.res / 'models').mk()
+    
+    def model_save(self, epoch):
+        return self.models / 'model-%s.pth' % epoch
+
+    def get_saved_model_epochs(self):
+        _, save_paths = self.models.ls()
+        if len(save_paths) == 0:
+            return []
+        match_epoch = lambda path: re.match('.+/model-(\d+)\.pth', path)
+        return [int(m.groups()[0]) for m in (match_epoch(p) for p in save_paths) if m is not None]
+
+    def load_model_state(self, epoch=None, path=None):
+        if epoch is not None:
+            path = self.model_save(epoch)
+        save_path = Path(path)
+        if save_path.exists():
+            return torch.load(save_path)
+        return None
+
+    def save_model_state(self, epoch, state):
+        save_path = self.model_save(epoch)
+        torch.save(state, save_path)
+        return save_path
+
+    def load_max_model_state(self, min_epoch=0):
+        epochs = self.get_saved_model_epochs()
+        if len(epochs) == 0:
+            print('No saved model found in %s' % self.models)
             return None
-        return util.load_json(self.test_result_path)
+        epoch = max(epochs)
+        if epoch <= min_epoch:
+            print('Model is already at epoch %s, no need to load' % min_epoch)
+            return None
+        return self.load_model_state(epoch=epoch)
+
+    @property
+    def model_best(self):
+        return self.models / 'best_model.pth'
+
+    def load_best_model_state(self):
+        if self.model_best.exists():
+            return self.load_model_state(path=self.model_best)
+        print('No saved model found in %s' % self.models)
+        return None
+
+    def link_model_best(self, model_save):
+        self.model_best.rm().link(Path(model_save).rel(self.models))
+

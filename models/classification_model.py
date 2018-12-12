@@ -1,7 +1,7 @@
-from models.base_model import BaseModel
+from models.nn_model import NNModel
 import metrics
 
-class ClassificationModel(BaseModel):
+class ClassificationModel(NNModel):
     def train_metrics(self, y_true, pred):
         return {
             'loss': pred['loss'],

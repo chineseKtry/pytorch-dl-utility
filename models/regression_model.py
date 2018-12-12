@@ -1,9 +1,9 @@
 from __future__ import print_function, absolute_import
 
-from models.base_model import BaseModel
+from models.nn_model import NNModel
 import metrics
 
-class RegressionModel(BaseModel):
+class RegressionModel(NNModel):
 
     def train_metrics(self, y_true, pred):
         return {

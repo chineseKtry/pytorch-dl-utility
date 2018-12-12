@@ -1,85 +1,86 @@
 from __future__ import print_function, absolute_import
 
 import argparse
-from glob import glob
-import numpy as np
-import os
-from pprint import pprint
-import shutil
-import sys
 import torch
 
 from hyperband import Hyperband
+from experiment import Experiment
 from config import Config
-import util
+from util import *
 
-parser = argparse.ArgumentParser(description='PyTorch + Hyperband for genomics')
+parser = argparse.ArgumentParser(description='PyTorch + Hyperband for genomics. Run script arguments:', add_help=False)
 parser.add_argument('-y', '--hyper', dest='hyper', default=False, action='store_true',
                     help='Perform hyper-parameter tuning')
+parser.add_argument('-t', '--train', dest='train', default=False, action='store_true',
+                    help='Train a model for a particular hyper-parameter')
 parser.add_argument('-e', '--eval', dest='eval', default=False, action='store_true',
                     help='Evaluate model on test set')
+parser.add_argument('-p', '--predict', nargs='+', dest='pred', type=Path, help='Prediction input path')
 parser.add_argument('--debug', dest='debug', default=False, action='store_true',
                     help='Debug mode, run one iteration')
-parser.add_argument('-c', '--cpu', dest='cpu', default=False, action='store_true',
+parser.add_argument('--cpu', dest='cpu', default=False, action='store_true',
                     help='Use CPU instead of GPU')
+args, rem_argv = parser.parse_known_args()
+if set(rem_argv) & {'--help', '-h'}:
+    parser.print_help()
 
-parser.add_argument('-f', '--model', dest='model_path',
+exp_parser = argparse.ArgumentParser(description='Experiment arguments:')
+exp_parser.add_argument('-x', '--experiment', dest='exp', type=Path, default='',
+                        help='Experiment json file')
+exp_parser.add_argument('-c', '--config', dest='config', type=Path, default='',
+                        help='Config json file')
+
+exp_parser.add_argument('-r', '--result', dest='res', type=Path, help='Result directory')
+exp_parser.add_argument('-f', '--model', dest='model', type=Path,
                     help='Path to python file with PyTorch model')
-parser.add_argument('-d', '--data', dest='data_dir', help='Data directory')
-parser.add_argument('-r', '--result', dest='result_dir', help='Result directory')
-parser.add_argument('-p', '--predict', dest='pred_subpath', help='Prediction input path')
+exp_parser.add_argument('-d', '--data', dest='data', type=Path, help='Data directory')
 
-parser.add_argument('-ep', '--epoch', dest='epoch', type=int,
-                    help='Number of epochs to train and hyperparameter tune for')
-parser.add_argument('-bs', '--batch-size', dest='batch_size', default=100, type=int,
+exp_parser.add_argument('-he', '--hyper-epoch', dest='hyper_epoch', type=int, default=0,
+                    help='Number of epochs to tune hyperparameters for')
+exp_parser.add_argument('-te', '--train-epoch', dest='train_epoch', type=int, default=0,
+                    help='Number of epochs to train for')
+exp_parser.add_argument('-bs', '--batch-size', dest='batch_size', type=int, default=100,
                     help='Batch size in gradient-based training')
-parser.add_argument('-es', '--early-stopping', dest='early_stopping', default=False, action='store_true',
+exp_parser.add_argument('-es', '--early-stopping', dest='early_stopping', default=False, action='store_true',
                     help='Whether to stop early after a number of iterations with no improvement')
-parser.add_argument('-adv','--adversarial',dest='adversarial',help='Perform adversarial training')
-parser.add_argument('-epsilon','--epsilon',dest='epsilon',default=1.0,type=float,
-                    help='Epsilon value for creating adversarial perturbations')
-parser.add_argument('-seq','--seq',dest='seq',default='aa',type=str,
-                    help='Sequence type (aa, dna, etc.)')
-
-args = parser.parse_args()
-
-def import_model(path):
-    import imp
-    model_def = imp.load_source('model', path)
-    return model_def
+exp_parser.add_argument('-pt', '--patience', dest='patience', type=int, default=3,
+                    help='Stop training early after this number of iterations with no improvement')
+exp_args = exp_parser.parse_args(rem_argv)
 
 if __name__ == '__main__':
+    config = None
+    if exp_args.exp:
+        print('Loading experiment from %s' % exp_args.exp)
+        exp = Experiment.from_path(exp_args.exp).set_vars()
+        if exp_args.config:
+            print('Loading config from %s' % exp_args.config)
+            config = Config.from_path(exp_args.config) or exp.config(exp_args.config)
+        exp_args = exp_parser.parse_args(exp.get_flags()) # reparse arguments from flags from config
+    else:
+        exp = Experiment(exp_args.res, exp_args.data, exp_args.model)
+    for k, v in vars(exp_args).items():
+        if not hasattr(exp, k):
+            setattr(exp, k, v)
+
     if not args.cpu:
         if not torch.cuda.is_available():
             print('GPU not available, switching to CPU')
             args.cpu = True
-
     if args.debug:
-        args.epoch = 1
-        args.batch_size = 2
+        exp.train_epoch = exp.hyper_epoch = 1
 
-    util.makedirs(args.result_dir)
-    shutil.copy(args.model_path, os.path.join(args.result_dir, 'model_def.py'))
-    model_def = import_model(args.model_path)
+    exp.model.cp(exp.res / 'model_def.py')
+    Model = import_module('model', exp.model._).Model
 
-    best_config = Config(args.result_dir, from_best=True)
     if args.hyper:
-        if best_config.exist_best():
-            print('Best config %s => %s already exists, skipping hyperparameter search' % (best_config.best_dir, best_config.name))
-        else:
-            gen = model_def.get_train_generator(args.data_dir, args.batch_size)
-            if type(gen) == tuple:
-                train_generator, val_generator = gen
-            else:
-                train_generator = gen
-                val_generator = model_def.get_val_generator(args.data_dir)
-            hb = Hyperband(model_def.get_config, model_def.Model, args.result_dir,
-                        train_generator, val_generator, args.epoch, args)
-            best_result = hb.run()
-            best_config = best_result['config']
-            print('Best config:', best_config.name)
-            print('Iterations:', best_result['epochs'])
-            print(best_result['result'].to_string(header=False))
+        Hyperband(Model, exp, args).run()
+    
+    model = None
+    if args.train:
+        config = config or exp.config(params=Model.get_params(exp))
+        print('Training %s for %s epochs' % (config.name, exp.train_epoch))
+        model = Model(exp, config, cpu=args.cpu, debug=args.debug)
+        model.fit(exp.train_epoch)
 
     if args.adversarial:
 
@@ -120,30 +121,15 @@ if __name__ == '__main__':
         #             model.fit(train_generator,val_generator, args.epoch)
 
     if args.eval:
-        best_config.test_result_path = os.path.join(best_config.save_dir, 'test_result.json')
-        result = best_config.load_test_result()
-        if result is not None:
-            print('Loaded previous evaluation result:', util.format_json(result))
-        else:
-            model = model_def.Model(best_config, args).load()
-            test_generator = model_def.get_test_generator(args.data_dir,seq=args.seq)
-            result = model.evaluate(test_generator)
-            print('Evaluation result:', util.format_json(result))
-            best_config.save_test_result(result)
+        config = config or exp.config_best()
+        print('Testing %s' % config.name)
+        model = model or Model(exp, config, cpu=args.cpu, debug=args.debug)
+        model.test()
 
-    if args.pred_subpath:
-        pred_in_glob = os.path.join(args.data_dir, args.pred_subpath)
-        model = model_def.Model(best_config, args).load()
-        for pred_in in glob(pred_in_glob):
-            subpath = pred_in.replace(args.data_dir, '').lstrip('/')
-            pred_out = os.path.join(best_config.save_dir, subpath) + '.npy'
-            if os.path.exists(pred_out):
-                print('Prediction already exist at %s' % pred_out)
-            else:
-                pred_generator = model_def.get_pred_generator(pred_in)
-                Y = model.predict(pred_generator)
-                if hasattr(model_def, 'save_prediction'):
-                    model_def.save_prediction(args.pred_subpath, Y)
-                else:
-                    np.save(pred_out, Y)
-                    print('Saved predictions to %s' % pred_out)
+    if args.pred:
+        config = config or exp.config_best()
+        print('Predicting with %s on %s' % (config.name, args.pred))
+        model = model or Model(exp, config, cpu=args.cpu, debug=args.debug)
+        for p in args.pred:
+            model.predict(p)
+        
