@@ -1,3 +1,6 @@
+from __future__ import print_function, absolute_import
+from six.moves import range
+
 import os
 import re
 from time import time
@@ -7,6 +10,7 @@ import pandas as pd
 import torch
 
 from config import Config
+from matchers import apply_matchers
 import util
 
 
@@ -21,25 +25,35 @@ class BaseModel(object):
         self.init_model()
         self.network.to(self.device)
 
-    def init_model(self, network, optimizer, constraints=[]):
+    def init_model(self, network, optimizer, initializers=[], constraints=[]):
         self.network = network
         self.optimizer = optimizer
         self.constraints = constraints
+        apply_matchers(self.network.named_modules(), initializers)
         if self.args.debug:
             print(self.network)
             print(self.optimizer)
 
-    def fit(self, train_gen, val_gen, stop_epoch):
+    def fit(self, train_gen, val_gen, stop_epoch, early_stopping=False):
+        config = self.config
         self.load()
         if self.epoch >= stop_epoch:
             print('Already completed %s epochs' % self.epoch)
             return
         
         self.network.train()
+        
         e_counter = util.progress_manager.counter(
-            total=stop_epoch, desc='%s. Epoch' % self.config.name, unit='epoch', leave=False)
+            total=stop_epoch, desc='%s. Epoch' % config.name, unit='epoch', leave=False)
         e_counter.update(self.epoch)
-        for epoch in xrange(self.epoch, stop_epoch):
+        stopped_early = False
+        for epoch in range(self.epoch, stop_epoch):
+            if early_stopping and self.epoch > 3:
+                results = config.load_train_results().iloc[-4:]
+                if results['hyperband_reward'].idxmax() == results.index[0]:
+                    stopped_early = True
+                    break
+
             self.epoch = epoch + 1
             start = time()
             t_results = pd.DataFrame([self.fit_batch(xy) for xy in train_gen])
@@ -51,13 +65,14 @@ class BaseModel(object):
             epoch_result['hyperband_reward'] = self.get_hyperband_reward(epoch_result)
             epoch_result['execution_time'] = '%.5g' % (time() - start)
             
-            self.config.put_train_result(self.epoch, epoch_result)
+            config.put_train_result(self.epoch, epoch_result)
             print('Epoch %s:\n%s\n' % (self.epoch, epoch_result.to_string(header=False)))
 
             e_counter.update()
         e_counter.close()
         self.save()
-        self.config.save_train_results()
+        config.save_train_results()
+        return self.epoch, epoch_result, stopped_early
     
     def to_torch(self, x):
         if type(x) == dict:
@@ -70,10 +85,10 @@ class BaseModel(object):
         if type(t) == dict:
             return { k: self.from_torch(v) for k, v in t.items() if v is not None }
         elif type(t) in [list, tuple]:
-            return [self.from_torch(v) for v in x]
+            return [self.from_torch(v) for v in t]
         
         x = t.detach().cpu().numpy()
-        if x.size == 1:
+        if x.size == 1 or np.isscalar(x):
             return np.asscalar(x)
         return x
 
@@ -84,9 +99,7 @@ class BaseModel(object):
         loss_t.backward()
         self.optimizer.step()
         
-        for module_name, module in self.network.named_modules():
-            for constraint in self.constraints:
-                constraint.apply(module_name, module)
+        apply_matchers(self.network.named_modules(), self.constraints)
         _, y = xy
         return self.train_metrics(y, self.from_torch(pred_t))
     
@@ -104,7 +117,7 @@ class BaseModel(object):
     def evaluate(self, gen):
         self.network.eval()
         with torch.no_grad():
-            preds = [self.from_torch(self.network(*self.to_torch(xy))) for xy in gen]
+            preds = [self.from_torch(self.network(*self.to_torch(xy))[1]) for xy in gen]
         return self.eval_metrics(gen.get_Y(), self.reduce_preds(preds))
 
     def predict(self, gen):

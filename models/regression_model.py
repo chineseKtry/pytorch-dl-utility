@@ -1,20 +1,21 @@
-from base_model import BaseModel
+from __future__ import print_function, absolute_import
+
+from models.base_model import BaseModel
 import metrics
 
 class RegressionModel(BaseModel):
 
-    def init_model(self, network, optimizer, constraints=[]):
-        super(RegressionModel, self).init_model(network, nn.MSELoss(), optimizer, constraints=constraints)
-        
-    def train_metrics(self, y_true, y_pred):
+    def train_metrics(self, y_true, pred):
         return {
-            'mse': metrics.mse(y_true, y_pred)
+            'loss': pred['loss'],
+            'mse': metrics.mse(y_true, pred['y'])
         }
 
-    def eval_metrics(self, y_true, y_pred):
+    def eval_metrics(self, y_true, pred):
         return {
-            'mse': metrics.mse(y_true, y_pred),
-            'pearson': metrics.pearson(y_true, y_pred)
+            'loss': pred['loss'],
+            'mse': metrics.mse(y_true, pred['y']),
+            'pearson': metrics.pearson(y_true, pred['y'])
         }
 
     def get_hyperband_reward(self, result):

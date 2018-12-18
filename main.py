@@ -1,4 +1,5 @@
-from __future__ import print_function
+from __future__ import print_function, absolute_import
+
 import argparse
 from glob import glob
 import numpy as np
@@ -32,6 +33,8 @@ parser.add_argument('-ep', '--epoch', dest='epoch', type=int,
                     help='Number of epochs to train and hyperparameter tune for')
 parser.add_argument('-bs', '--batch-size', dest='batch_size', default=100, type=int,
                     help='Batch size in gradient-based training')
+parser.add_argument('-es', '--early-stopping', dest='early_stopping', default=False, action='store_true',
+                    help='Whether to stop early after a number of iterations with no improvement')
 parser.add_argument('-adv','--adversarial',dest='adversarial',help='Perform adversarial training')
 parser.add_argument('-epsilon','--epsilon',dest='epsilon',default=1.0,type=float,
                     help='Epsilon value for creating adversarial perturbations')
@@ -39,6 +42,11 @@ parser.add_argument('-seq','--seq',dest='seq',default='aa',type=str,
                     help='Sequence type (aa, dna, etc.)')
 
 args = parser.parse_args()
+
+def import_model(path):
+    import imp
+    model_def = imp.load_source('model', path)
+    return model_def
 
 if __name__ == '__main__':
     if not args.cpu:
@@ -52,8 +60,7 @@ if __name__ == '__main__':
 
     util.makedirs(args.result_dir)
     shutil.copy(args.model_path, os.path.join(args.result_dir, 'model_def.py'))
-    sys.path.append(args.result_dir)
-    import model_def
+    model_def = import_model(args.model_path)
 
     best_config = Config(args.result_dir, from_best=True)
     if args.hyper:
@@ -68,9 +75,11 @@ if __name__ == '__main__':
                 val_generator = model_def.get_val_generator(args.data_dir)
             hb = Hyperband(model_def.get_config, model_def.Model, args.result_dir,
                         train_generator, val_generator, args.epoch, args)
-            best_config, best_result = hb.run()
+            best_result = hb.run()
+            best_config = best_result['config']
             print('Best config:', best_config.name)
-            print(best_result.to_string(header=False))
+            print('Iterations:', best_result['epochs'])
+            print(best_result['result'].to_string(header=False))
 
     if args.adversarial:
 
@@ -127,7 +136,8 @@ if __name__ == '__main__':
         pred_in_glob = os.path.join(args.data_dir, args.pred_subpath)
         model = model_def.Model(best_config, args).load()
         for pred_in in glob(pred_in_glob):
-            pred_out = os.path.join(best_config.save_dir, pred_in.replace(args.data_dir + '/', '')) + '.npy'
+            subpath = pred_in.replace(args.data_dir, '').lstrip('/')
+            pred_out = os.path.join(best_config.save_dir, subpath) + '.npy'
             if os.path.exists(pred_out):
                 print('Prediction already exist at %s' % pred_out)
             else:

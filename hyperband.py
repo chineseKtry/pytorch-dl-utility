@@ -1,4 +1,5 @@
-from __future__ import print_function
+from __future__ import print_function, absolute_import
+from six.moves import range
 
 import math
 import os
@@ -27,8 +28,9 @@ class Hyperband:
         self.all_results = []
 
     def run(self, dry_run=False):
+        args = self.args
         s_counter = util.progress_manager.counter(total=self.s_max + 1, desc='Sweeping s', leave=False)
-        for s in reversed(xrange(self.s_max + 1)):
+        for s in reversed(range(self.s_max + 1)):
 
             # initial number of configurations
             n = int(math.ceil(self.B / self.max_iter / (s + 1) * self.eta ** s))
@@ -40,7 +42,7 @@ class Hyperband:
             T = [Config(self.result_dir, config_dict=self.get_config()) for _ in range(n)]
 
             i_counter = util.progress_manager.counter(total=s + 1, desc='s = %s. Sweeping i' % s, leave=False)
-            for i in xrange(s + 1):
+            for i in range(s + 1):
                 # Run each of the n configs for <iterations>
                 # and keep best (n_configs / eta) configurations
                 n_configs = n * self.eta ** (-i)
@@ -51,9 +53,10 @@ class Hyperband:
                 for config in T:
                     print('Training', config.name)
 
-                    model = self.get_model(config, self.args)
+                    model = self.get_model(config, args)
                     if dry_run:
                         result = {'hyperband_reward': random.random()}
+                        stopped_early = False
                     else:
                         result = config.get_train_result(n_iterations)
 
@@ -61,21 +64,25 @@ class Hyperband:
                             print('Loaded previous results')
                             print(result.to_string(header=False, float_format='%.6g'))
                         else:
-                            model.fit(self.train_generator, self.val_generator, n_iterations)
-                            result = config.get_train_result(n_iterations)
-
-                            assert result is not None, 'Result for every epoch must be saved in the fit loop'
+                            epoch, result, stopped_early = model.fit(self.train_generator, self.val_generator, n_iterations, early_stopping=args.early_stopping)
+                            if stopped_early and epoch < n_iterations:
+                                print('Stopped early at iteration %s' % epoch)
 
                     assert 'hyperband_reward' in result.index, 'Result must be a dictionary containing the key "hyperband_reward"'
                     print()
-                    results.append((config, result))
-                    # TODO early stopping
+                    results.append({
+                        'config': config,
+                        'epochs': epoch,
+                        'result': result,
+                        'stopped_early': stopped_early
+                    })
                     t_counter.update()
 
-                # select a number of best configurations for the next loop
-                results = sorted(results, key=lambda (config, result): result['hyperband_reward'], reverse=True)
-                T = [config for config, result in results[: int(n_configs / self.eta)]]
                 self.all_results.extend(results)
+                # select a number of best configurations for the next loop
+                results = [result for result in results if not result['stopped_early']]
+                results = sorted(results, key=lambda result: result['result']['hyperband_reward'], reverse=True)
+                T = [result['config'] for result in results[: int(n_configs / self.eta)]]
 
                 t_counter.close()
                 i_counter.update()
@@ -86,6 +93,6 @@ class Hyperband:
         s_counter.close()
         util.progress_manager.stop()
         
-        best_config, best_result = max(self.all_results, key=lambda (config, result): result['hyperband_reward'])
-        best_config.link_as_best()
-        return best_config, best_result
+        best_result = max(self.all_results, key=lambda result: result['result']['hyperband_reward'])
+        best_result['config'].link_as_best()
+        return best_result
