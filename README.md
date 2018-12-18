@@ -146,7 +146,7 @@ See `constaints.py` for definitions. In general constraints apply to all layers 
 Applies a max norm constraint.
 
 ## Adversarial Training
-Uses Projected Gradient Descent (PGD), a $k$-step iterative version of the Fast Gradient Sign Method (FGSM), to generate adversarial examples to be included in the training set for adversarial training. See examples of adversarial training with corresponding bash scripts in `examples/` subdirectory.
+Uses Projected Gradient Descent (PGD), a k-step iterative version of the Fast Gradient Sign Method (FGSM), to generate adversarial examples to be included in the training set for adversarial training. See examples of adversarial training with corresponding bash scripts in `examples/` subdirectory.
 
 ## Examples
 Some examples can be found in the `examples/` subdirectory.
