@@ -106,18 +106,18 @@ if __name__ == '__main__':
             os.symlink(adv_config.name, adv_config.best_dir)
 
         # virtual adversarial training (still under development...)
-        else:
-            if not os.path.exists(os.path.dirname(args.adversarial)):
-                print('Data directory for semi-supervised learning not available.')
-            else:
-                print('Performing virtual adversarial training')
-                virtual_train_generator = model_def.get_virtual_adversarial_train_generator(args.adversarial, args.batch_size, model)
-                for epoch_no in range(1,args.epoch):
-                    # unsupervised task
-                    model.fit(virtual_train_generator,val_generator, args.epoch)
+        # else:
+        #     if not os.path.exists(os.path.dirname(args.adversarial)):
+        #         print('Data directory for semi-supervised learning not available.')
+        #     else:
+        #         print('Performing virtual adversarial training')
+        #         virtual_train_generator = model_def.get_virtual_adversarial_train_generator(args.adversarial, args.batch_size, model)
+        #         for epoch_no in range(1,args.epoch):
+        #             # unsupervised task
+        #             model.fit(virtual_train_generator,val_generator, args.epoch)
 
-                    # supervised task
-                    model.fit(train_generator,val_generator, args.epoch)
+        #             # supervised task
+        #             model.fit(train_generator,val_generator, args.epoch)
 
     if args.eval:
         best_config.test_result_path = os.path.join(best_config.save_dir, 'test_result.json')
@@ -127,7 +127,6 @@ if __name__ == '__main__':
         else:
             model = model_def.Model(best_config, args).load()
             test_generator = model_def.get_test_generator(args.data_dir,seq=args.seq)
-            # test_generator = model_def.get_adversarial_test_generator(args.data_dir, args.batch_size, model, args.epsilon, seq=args.seq)
             result = model.evaluate(test_generator)
             print('Evaluation result:', util.format_json(result))
             best_config.save_test_result(result)

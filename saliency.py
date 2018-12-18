@@ -46,7 +46,6 @@ class SaliencyMap():
 
 		return np.array(gradients), target_label_idx
 
-	# integrated gradients
 	def integrated_gradients(self,inputs, target_label_idx, baseline, steps=50):
 
 		if baseline is None:
@@ -75,9 +74,7 @@ class SaliencyMap():
 
 		return seq_saliency
 
-	def conv_feature_weights(self):
-		return self.network.state_dict()['features.0.weight']
-
+	# converts a one-hot encoded sequence to its corresponding string
 	def ohe2seq(self,ohe_seq,seqtype='dna'):
 		seq = ''
 		if seqtype == 'dna':
@@ -88,6 +85,8 @@ class SaliencyMap():
 
 		return seq
 
+	# calculates saliency scores for each sequence in a set of HDF5 files & writes 
+	# the results + corresponding sequences to file
 	def log_seq_saliency_scores(self,result_dir,data_dir,glob_str,target_label_idx,batch_size=128,steps=10):
 		# load datasets
 		data_glob_str = os.path.join(data_dir,glob_str)
@@ -112,6 +111,8 @@ class SaliencyMap():
 		# write sequences saliency scores to file
 		np.savetxt(os.path.join(result_dir,'best_config','saliency.scores'),sal_scores,delimiter='\t')
 
+	# creates PWMs using a sliding window approach based on saliency scores calculated
+	# from log_seq_saliency_scores()
 	def create_pwm_arrays_from_grads(self,result_dir,data_dir,window_size=12,batch_size=128):
 
 		from Bio import motifs
@@ -148,6 +149,9 @@ class SaliencyMap():
 			for nuc in ['A','C','G','T']:
 				writer.writerow(motif.pwm[nuc])
 
+	# creates PWMs using a sliding window approach based on saliency scores calculated
+	# from log_seq_saliency_scores() - weights nucleotides for each sequence by the
+	# saliency score
 	def create_pwm_arrays_from_grads_weighted(self,result_dir,data_dir,window_size=12,batch_size=128):
 
 		from Bio import motifs
@@ -185,6 +189,7 @@ class SaliencyMap():
 			for nuc in ['A','C','G','T']:
 				writer.writerow(list(nuc_scores[nuc]))
 
+# creates a saliency map for a DNA sequence given its corresponding saliency scores
 def visualize_saliency(seq,saliency_scores):
 
 	import matplotlib.patches as mpatches
@@ -200,8 +205,6 @@ def visualize_saliency(seq,saliency_scores):
 		colors.append(colorIdx_dict[seq[i]])
 		vals.append(saliency_scores[i])
 
-	# fig, ax = plt.subplots(2,figsize=(12, 6))
-
 	vals_group = []
 	for i in range(0,len(vals),5):
 		vals_group.append(np.mean(vals[i:i+5]))
@@ -215,6 +218,5 @@ def visualize_saliency(seq,saliency_scores):
 	plt.legend(handles=[A_patch,T_patch,C_patch,G_patch])
 	plt.xlabel('Nucleotide Position')
 	plt.ylabel('Saliency Score')
-	# ax[1].bar(np.array(range(1,len(vals)+1,5)),vals_group,width=5)
 	plt.show()
 
