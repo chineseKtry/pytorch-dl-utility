@@ -148,6 +148,24 @@ Applies a max norm constraint.
 ## Adversarial Training
 Uses Projected Gradient Descent (PGD), a k-step iterative version of the Fast Gradient Sign Method (FGSM), to generate adversarial examples to be included in the training set for adversarial training. See examples of adversarial training with corresponding bash scripts in `examples/` subdirectory.
 
+## TFBS Motif Detection + Saliency Analysis
+See the following examples (bash scripts) for each of the below components of the pipeline.
+
+### Training + Testing Binary Classifiers
+See `examples/tfbs_saliency/tfbs_train.sh` for training.   
+See `examples/tfbs_saliency/tfbs_test.sh` for testing.
+
+### Calculate Saliency Scores + Create PWMs
+Performs integrated gradients on a set of sequences from a given set of HDF5 files and writes both the sequences and their corresponding nucleotide-level saliency scores to files. The script then uses these sequences and saliency scores to detect subsequences with high saliency using a sliding window approach (i.e. extracting the subsequences that correspond with the highest integrated gradients values). Subsequences with integrated gradient values that are above the 80th percentile of scores are retained, while those that do not satisfy this criterion are discarded. We perform this thresholding to ensure that the most salient subsequences are more highly represented. (Note: This thresholding can be easily removed if desired.) The remaining subsequences are then aggregated together to generate a PWM for each dataset/experiment. 
+See `examples/tfbs_saliency/motif.sh`.
+
+### Compare Generated PWMs with Database PWMs using TOMTOM
+See `examples/tfbs_saliency/meme.sh` for example that employs Saber's `match_pwm.py` script.
+
+### Aggregate Results
+Collects the outputs of the TOMTOM analysis across all experiments and organizes them under a single file.  
+See `examples/tfbs_saliency/collect_tomtom.sh`. 
+
 ## Examples
 Some examples can be found in the `examples/` subdirectory.
 
