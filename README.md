@@ -145,6 +145,11 @@ See `constaints.py` for definitions. In general constraints apply to all layers 
 #### MaxNormConstraint
 Applies a max norm constraint.
 
+## Adversarial Training
+Uses Projected Gradient Descent, a $k$-step iterative version of the Fast Gradient Sign Method (FGSM), to generate adversarial examples to be included in the training set for adversarial training.
+$\boldsymbol{x}^{t+1} + \epsilon \text{sign}(\nabla_{\boldsymbol{x}}\ell(f(\boldsymbol{x}^t),y))$ for $t=0,...,k-1$, where $\boldsymbol{x}^0=\boldsymbol{x}$
+See examples of adversarial training with corresponding bash scripts in 'examples/' subdirectory.
+
 ## Examples
 Some examples can be found in the `examples/` subdirectory.
 
