@@ -83,16 +83,6 @@ class AdversarialGenerator():
 
             adv_X = np.array([self.single_aa_perturb(X[i],grads[i]) for i in range(X.shape[0])])
 
-            # k = 0
-            # for i in range(X.shape[0]):
-            #     if np.sum(adv_X[i] != X[0]) == 0:
-            #         k += 1
-            # print(k,'/',X.shape[0])
-            # print(np.sum(adv_X[0] != X[0]))
-            # print(np.argmax(adv_X[0].squeeze(),axis=0))
-            # print(np.argmax(X[0].squeeze(),axis=0))
-            # print('=========')
-
         else:
             for i in range(self.num_iter):
                 # zero out gradients
@@ -105,30 +95,15 @@ class AdversarialGenerator():
 
                 # update object
                 if Y is None: # maximize loss/divergence for VAT
-                    seq_tensor.data += self.epsilon*seq_tensor.grad.data #.sign()
+                    seq_tensor.data += self.epsilon*seq_tensor.grad.data.sign()
                 else: # increase loss/divergence for labeled data (move away from label)
-                    seq_tensor.data += self.epsilon*seq_tensor.grad.data #.sign()
+                    seq_tensor.data += self.epsilon*seq_tensor.grad.data.sign()
                 # seq_tensor.data = self.cont_norm(seq_tensor.data)
 
             adv_X = seq_tensor.cpu().data.numpy()
 
         if self.ohe_output:
             adv_X = np.array([cont2ohe(X[i].squeeze(),adv_X[i].squeeze()) for i in range(X.shape[0])])
-
-        # print(np.max(adv_X),np.min(adv_X))
-        # if np.sum(adv_X != X) > 0:
-        # for i in range(adv_X.shape[0]):
-        #     if np.sum((np.argmax(adv_X[i].squeeze(),axis=0)-np.argmax(X[i].squeeze(),axis=0))[8:10]) > 0:
-            
-        #         # if np.sum(adv_X[i] != X[i]) > 0:
-        #         print(np.sum(adv_X[i].squeeze() - X[i].squeeze()),np.argmax(adv_X[i].squeeze(),axis=0)[8:10],np.argmax(X[i].squeeze(),axis=0)[8:10])
-        #         print(X[i].squeeze()[:,8:10])
-        #         print(adv_X[i].squeeze()[:,8:10])
-        #         print(np.sum(adv_X[i],0))
-        #         # print(adv_X[i])
-        #         print('=====')
-            # print(np.sum(adv_X != X),np.sum(adv_X[0],axis=0))
-        # print(np.sum(adv_X[0],axis=0))
 
         new_X = np.concatenate([X,adv_X]).astype(np.float32)
 
@@ -140,7 +115,7 @@ class AdversarialGenerator():
     def generate_regression(self,X,Y):
 
         seq_tensor = Variable(self.cudafy(torch.FloatTensor(X)),requires_grad=True)
-        target_tensor = Variable(torch.FloatTensor(Y.squeeze()))
+        target_tensor = Variable(self.cudafy(torch.FloatTensor(Y.squeeze())))
 
         for i in range(self.num_iter):
 
@@ -167,12 +142,13 @@ class AdversarialGenerator():
         if Y is None:
             return new_X
         else:
-            return new_X, np.tile(Y[:, 1].astype(np.long),2)
+            return new_X, np.tile(Y[:,0],2).astype(np.float32)
 
 class AdversarialH5pyBatchGenerator(MatrixBatchGenerator):
 
-    def __init__(self, glob_str, adversarial_generator, batch_size=None, shuffle=False, process_x_y=lambda X, Y: (X, Y)):
+    def __init__(self, glob_str, adversarial_generator, batch_size=None, shuffle=False, process_x_y=lambda X, Y: (X, Y),task='classification'):
         self.adversarial_generator = adversarial_generator
+        self.task = task
 
         files = [h5py.File(path) for path in glob(glob_str)]
         X, Y = zip(*[(file['data'][()], file['label'][()]) for file in files])
@@ -190,4 +166,8 @@ class AdversarialH5pyBatchGenerator(MatrixBatchGenerator):
         if self.Y is None:
             return self.adversarial_generator.generate_classification(self.X[start: self.i])
         else:
-            return self.adversarial_generator.generate_classification(self.X[start: self.i], self.Y[start: self.i])
+            if self.task == 'classification':
+                return self.adversarial_generator.generate_classification(self.X[start: self.i], self.Y[start: self.i])
+            elif self.task == 'regression':
+                return self.adversarial_generator.generate_regression(self.X[start: self.i], self.Y[start: self.i])
+

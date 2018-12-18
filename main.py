@@ -32,10 +32,10 @@ parser.add_argument('-ep', '--epoch', dest='epoch', type=int,
                     help='Number of epochs to train and hyperparameter tune for')
 parser.add_argument('-bs', '--batch-size', dest='batch_size', default=100, type=int,
                     help='Batch size in gradient-based training')
-parser.add_argument('-adv','--adversarial',dest='adversarial', default='normal',help='Perform adversarial training')
+parser.add_argument('-adv','--adversarial',dest='adversarial',help='Perform adversarial training')
 parser.add_argument('-epsilon','--epsilon',dest='epsilon',default=1.0,type=float,
                     help='Epsilon value for creating adversarial perturbations')
-parser.add_argument('-seq','--seq',dest='seq',default='aa',type=float,
+parser.add_argument('-seq','--seq',dest='seq',default='aa',type=str,
                     help='Sequence type (aa, dna, etc.)')
 
 args = parser.parse_args()
@@ -73,12 +73,9 @@ if __name__ == '__main__':
             print(best_result.to_string(header=False))
 
     if args.adversarial:
-        # start from best trained model
-        # model = model_def.Model(best_config, args).load()
 
         # start from randomly initialized model
         adv_config = Config(args.result_dir, config_dict=model_def.get_config())
-        # model = model_def.ModelVAT(adv_config,args)
         model = model_def.Model(adv_config,args)
 
         if args.adversarial == 'normal':
@@ -99,6 +96,7 @@ if __name__ == '__main__':
                 os.remove(adv_config.best_dir)
             os.symlink(adv_config.name, adv_config.best_dir)
 
+        # virtual adversarial training (still under development...)
         else:
             if not os.path.exists(os.path.dirname(args.adversarial)):
                 print('Data directory for semi-supervised learning not available.')
@@ -113,13 +111,14 @@ if __name__ == '__main__':
                     model.fit(train_generator,val_generator, args.epoch)
 
     if args.eval:
-        print(best_config.name)
+        best_config.test_result_path = os.path.join(best_config.save_dir, 'test_result.json')
         result = best_config.load_test_result()
         if result is not None:
             print('Loaded previous evaluation result:', util.format_json(result))
         else:
             model = model_def.Model(best_config, args).load()
             test_generator = model_def.get_test_generator(args.data_dir,seq=args.seq)
+            # test_generator = model_def.get_adversarial_test_generator(args.data_dir, args.batch_size, model, args.epsilon, seq=args.seq)
             result = model.evaluate(test_generator)
             print('Evaluation result:', util.format_json(result))
             best_config.save_test_result(result)
