@@ -2,10 +2,13 @@ from __future__ import print_function, absolute_import
 from fnmatch import fnmatch
 
 
-def apply_matchers(named_modules, matchers):
+def apply_matchers(named_modules, matchers, loss_t=None):
     for module_name, module in named_modules:
         for matcher in matchers:
-            matcher.apply(module_name, module)
+            x = matcher.apply(module_name, module)
+            if loss_t is not None and x is not None:
+                loss_t += x
+    return loss_t
 
 
 class ModuleMatcher(object):
@@ -25,7 +28,7 @@ class ModuleMatcher(object):
     
     def apply(self, module_name, module):
         if self.match(module_name, module):
-            self.function(module)
+            return self.function(module)
 
     def function(self, module):
         raise NotImplementedError()

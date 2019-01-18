@@ -13,8 +13,8 @@ class Experiment(object):
     def __repr__(self):
         return 'name=%s\nresult=%s\ndata=%s\nmodel=%s\nflags=%s\nvars=%s' % (self.name, self.res, self.data, self.model, self.flags, format_json(self.vars))
     
-    def get(self, attr):
-        return getattr(self, attr, None)
+    def get(self, attr, default=None):
+        return getattr(self, attr, default)
     
     @property
     def path(self):
@@ -90,14 +90,14 @@ class Experiment(object):
         return self
 
     def cmd_full(self, gpu=None):
-        cmd = 'python3 $LP/main.py -f %s -d %s -r %s' % (self.model, self.data, self.res)
+        cmd = 'python3 $LE/main.py -f %s -d %s -r %s' % (self.model, self.data, self.res)
         cmd = ' '.join([cmd] + self.get_flags())
         if gpu is not None:
             cmd = 'CUDA_VISIBLE_DEVICES=%s ' % gpu + cmd
         return cmd
     
     def cmd(self, gpu=None):
-        cmd = 'python3 $LP/main.py -x %s' % (self.path)
+        cmd = 'python3 $LE/main.py -xp %s' % (self.path)
         if gpu is not None:
             cmd = 'CUDA_VISIBLE_DEVICES=%s ' % gpu + cmd
         return cmd

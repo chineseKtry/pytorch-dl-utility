@@ -19,10 +19,11 @@ from callbacks.train_progress_bar import TrainProgressBar
 
 class NNModel(Model):
 
-    def set_model(self, network, optimizer, initializers=[], constraints=[]):
+    def set_model(self, network, optimizer, initializers=[], regularizers=[], constraints=[]):
         self.epoch = 0
         self.network = network.to(self.device)
         self.optimizer = optimizer
+        self.regularizers = regularizers
         self.constraints = constraints
         apply_matchers(self.network.named_modules(), initializers)
         if self.debug:
@@ -41,6 +42,7 @@ class NNModel(Model):
         while not train_state.stop and self.epoch < stop_epoch:
             start = time()
             t_results = pd.DataFrame([self.fit_batch(xy) for xy in train_gen])
+            t_results = pd.DataFrame([self.fit_batch(xy) for xy in train_gen])
             self.epoch += 1
             epoch_result = t_results.mean(axis=0).add_prefix('train_')
 
@@ -58,6 +60,8 @@ class NNModel(Model):
     def fit_batch(self, xy):
         loss_t, pred_t = self.network(*to_torch(xy, device=self.device))
 
+        loss_t = apply_matchers(self.network.named_modules(), self.regularizers, loss_t=loss_t)
+
         self.optimizer.zero_grad()
         loss_t.backward()
         self.optimizer.step()
@@ -65,12 +69,15 @@ class NNModel(Model):
         apply_matchers(self.network.named_modules(), self.constraints)
         _, y = xy
         return self.train_metrics(y, from_torch(pred_t))
-
-    def evaluate(self, gen):
+    
+    def run_predict(self, gen):
         self.network.eval()
         with torch.no_grad():
             preds = [from_torch(self.network(*to_torch(xy, device=self.device))[1]) for xy in gen]
-        return self.eval_metrics(gen.get_Y(), reduce_preds(preds))
+        return reduce_preds(preds)
+
+    def evaluate(self, gen):
+        return self.eval_metrics(gen.get_Y(), self.run_predict(gen))
     
     def test(self):
         result = self.config.load_test_result()
@@ -94,11 +101,7 @@ class NNModel(Model):
             state = self.config.load_best_model_state()
             assert state is not None, 'No saved trained model exist'
             self.set_state(state)
-        self.network.eval()
-        with torch.no_grad():
-            preds = [from_torch(self.network(to_torch(x).to(self.device), None)[1]) for x in gen]
-        pred_out = reduce_preds(preds)
-        saver(pred_out)
+        saver(self.run_predict(gen))
         return self
     
     def get_pred_saver(self, pred_key):

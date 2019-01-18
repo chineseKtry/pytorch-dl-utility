@@ -25,7 +25,7 @@ if set(rem_argv) & {'--help', '-h'}:
     parser.print_help()
 
 exp_parser = argparse.ArgumentParser(description='Experiment arguments:')
-exp_parser.add_argument('-x', '--experiment', dest='exp', type=Path, default='',
+exp_parser.add_argument('-xp', '--experiment', dest='exp', type=Path, default='',
                         help='Experiment json file')
 exp_parser.add_argument('-c', '--config', dest='config', type=Path, default='',
                         help='Config json file')
@@ -35,9 +35,9 @@ exp_parser.add_argument('-f', '--model', dest='model', type=Path,
                     help='Path to python file with PyTorch model')
 exp_parser.add_argument('-d', '--data', dest='data', type=Path, help='Data directory')
 
-exp_parser.add_argument('-he', '--hyper-epoch', dest='hyper_epoch', type=int, default=0,
+exp_parser.add_argument('-he', '--hyper-epoch', dest='hyper_epoch', type=int,
                     help='Number of epochs to tune hyperparameters for')
-exp_parser.add_argument('-te', '--train-epoch', dest='train_epoch', type=int, default=0,
+exp_parser.add_argument('-te', '--train-epoch', dest='train_epoch', type=int,
                     help='Number of epochs to train for')
 exp_parser.add_argument('-bs', '--batch-size', dest='batch_size', type=int, default=100,
                     help='Batch size in gradient-based training')
@@ -55,7 +55,10 @@ if __name__ == '__main__':
         if exp_args.config:
             print('Loading config from %s' % exp_args.config)
             config = Config.from_path(exp_args.config) or exp.config(exp_args.config)
-        exp_args = exp_parser.parse_args(exp.get_flags()) # reparse arguments from flags from config
+        exp_file_args = exp_parser.parse_args(exp.get_flags()) # reparse arguments from flags from config
+        for k, v in vars(exp_file_args).items():
+            if not hasattr(exp, k) and v:
+                setattr(exp, k, v)
     else:
         exp = Experiment(exp_args.res, exp_args.data, exp_args.model)
     for k, v in vars(exp_args).items():
@@ -120,16 +123,16 @@ if __name__ == '__main__':
         #             # supervised task
         #             model.fit(train_generator,val_generator, args.epoch)
 
-    if args.eval:
+    if args.pred or args.eval:
         config = config or exp.config_best()
-        print('Testing %s' % config.name)
         model = model or Model(exp, config, cpu=args.cpu, debug=args.debug)
+
+    if args.eval:
+        print('Testing %s' % config.name)
         model.test()
 
     if args.pred:
-        config = config or exp.config_best()
         print('Predicting with %s on %s' % (config.name, args.pred))
-        model = model or Model(exp, config, cpu=args.cpu, debug=args.debug)
         for p in args.pred:
             model.predict(p)
         

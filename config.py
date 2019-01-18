@@ -10,14 +10,10 @@ class Config(object):
     def __init__(self, res, params):
         self.res = Path(res).mk()
         self.params = self.load_params() if self.path.exists() else params
-        self.name = res._real._name
+        self.name = self.res._real._name
         
         if not self.path.exists():
             self.save()
-
-    @property
-    def __eq__(self, other):
-        return self.path._ == other
 
     @property
     def path(self):
@@ -94,7 +90,7 @@ class Config(object):
         return (self.res / 'models').mk()
     
     def model_save(self, epoch):
-        return self.models / 'model-%s.pth' % epoch
+        return self.models / ('model-%s.pth' % epoch)
 
     def get_saved_model_epochs(self):
         _, save_paths = self.models.ls()

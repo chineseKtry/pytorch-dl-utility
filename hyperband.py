@@ -66,7 +66,7 @@ class Hyperband:
                     res_mon = None
                     def get_result_monitor(config):
                         nonlocal res_mon
-                        res_mon = HyperbandResultMonitor(config, exp.patience)
+                        res_mon = HyperbandResultMonitor(config, exp.early_stopping, exp.patience)
                         return res_mon
 
                     model = Model(exp, config, cpu=args.cpu, debug=args.debug).fit(n_iters, callbacks=[get_result_monitor, ModelSaver])
@@ -87,8 +87,9 @@ class Hyperband:
         print(config.load_train_results().loc[epoch].to_string(header=False))
 
 class HyperbandResultMonitor(ResultMonitor): # early stopping based on patience
-    def __init__(self, config, patience):
+    def __init__(self, config, early_stopping, patience):
         super(HyperbandResultMonitor, self).__init__(config)
+        self.early_stopping = early_stopping
         self.patience = patience
         self.best_reward = -float('inf')
         self.best_epoch = None
@@ -101,15 +102,18 @@ class HyperbandResultMonitor(ResultMonitor): # early stopping based on patience
         reward_fn = model.hyperband_reward
 
         reward = reward_fn(train_state.epoch_result)
-        is_best_epoch = reward > self.best_reward
-        if is_best_epoch:
+        train_state.record_epoch = False
+        train_state.save_recorded_to_disk = False
+        if reward > self.best_reward:
             self.best_reward = reward
             self.best_epoch = model.epoch
-            self.config.save_best_reward(self.best_reward, self.best_epoch)
+            train_state.record_epoch = True
             print('New best epoch %s with reward %s' % (self.best_epoch, self.best_reward))
-        train_state.save_epoch = is_best_epoch
+        elif self.best_epoch == model.epoch - 1:
+            train_state.save_recorded_to_disk = True
+            self.config.save_best_reward(self.best_reward, self.best_epoch)
 
-        if model.epoch > self.patience:
+        if self.early_stopping and model.epoch > self.patience:
             recent = self.train_results.iloc[-(self.patience + 1):]
             last_rewards = recent.apply(reward_fn, axis=1)
             if last_rewards.idxmax() == recent.index[0]:

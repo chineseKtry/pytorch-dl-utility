@@ -16,7 +16,7 @@ class MatrixBatchGenerator(object):
         assert Y is None or len(X) == len(Y), 'X and Y have mismatched lengths (%s and %s)' % (len(X), len(Y))
         self.N = len(X)
         if shuffle:
-            indices = np.random.permutation(self.N)
+            indices = np.random.RandomState(seed=42).permutation(self.N)
             self.X, self.Y = X[indices], (None if Y is None else Y[indices])
         else:
             self.X, self.Y = X, Y
@@ -32,7 +32,7 @@ class MatrixBatchGenerator(object):
         start = self.i
         self.i += self.batch_size
         if self.Y is None:
-            return self.X[start: self.i]
+            return (self.X[start: self.i], None)
         else:
             return (self.X[start: self.i], self.Y[start: self.i])
     
