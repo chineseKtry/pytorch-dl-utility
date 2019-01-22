@@ -2,7 +2,7 @@ from __future__ import print_function, absolute_import
 
 import pandas as pd
 
-from .callbacks import Callback
+from . import Callback
 
 class ResultMonitor(Callback):
     def on_train_start(self, model, train_state):

@@ -1,6 +1,6 @@
 import torch
 
-from matchers import WeightMatcher
+from . import WeightMatcher
 
 class MaxNormConstraint(WeightMatcher):
     def __init__(self, max_norm, **args):

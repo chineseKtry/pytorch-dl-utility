@@ -1,9 +1,10 @@
 from __future__ import print_function, absolute_import
-from .callbacks import Callback
 
-from util.progress_bar import RangeProgress
+from . import Callback
 
-class TrainProgressBar(Callback):
+from ..util.progress_bar import RangeProgress
+
+class TrainProgress(Callback):
     def on_train_start(self, model, train_state):
         self.prog = None
         if train_state.stop: return

@@ -1,40 +1,73 @@
+from __future__ import print_function, absolute_import
+
 import re
 
 import pandas as pd
 import torch
 
-from util import numpy_to_builtin, load_json, save_json, save_text, Path
+from .util import numpy_to_builtin, load_json, save_json, save_text, Path
 
 class Config(object):
-
-    def __init__(self, res, params):
-        self.res = Path(res).mk()
-        self.params = self.load_params() if self.path.exists() else params
-        self.name = self.res._real._name
-        
-        if not self.path.exists():
-            self.save()
+    def __init__(self, result, **kwargs):
+        if result is not None:
+            self.res = result
+            self.name = self.res._real._name
+            self.load()
+        for k, v in kwargs.items():
+            setattr(self, k, v)
+    
 
     @property
     def path(self):
         return self.res / 'config.json'
     
-    @classmethod
-    def from_path(cls, path):
-        if Path(path).exists():
-            args = load_json(path)
-            return cls(args['result'], args['params'])
-        else:
-            return None
-    
-    def load_params(self):
-        return load_json(self.path)['params']
-    
-    def save(self, force=False):
+    def load(self):
+        if self.path.exists():
+            for k, v in load_json(self.path).items():
+                setattr(self, k, v)
+
+    def save(self, force=False, model=None, data=None):
         if not force and self.path.exists():
             print('Not saving config %s, already exists and "force" is not specified' % self.path)
         else:
-            save_json(self.path, dict(result=self.res, params=numpy_to_builtin(self.params)))
+            self.res.mk()
+            save_json(self.path, numpy_to_builtin({k: v for k, v in vars(self).items() if k not in ['res', 'name']}))
+        self.link_model(model)
+        self.link_data(data)
+        return self
+    
+
+    def var(self, *args, **kwargs):
+        for a in args:
+            kwargs[a] = True
+        for k, v in kwargs.items():
+            setattr(self, k, v)
+        return self
+    
+    def unvar(self, *args):
+        for a in args:
+            delattr(self, a)
+        return self
+    
+    def get(self, k, v):
+        return getattr(self, k, v)
+
+    
+    @property
+    def model(self):
+        return self.res / 'model.py'
+    
+    def link_model(self, model):
+        if model and not self.model.exists():
+            self.model.link(model)
+
+    @property
+    def data(self):
+        return self.res / 'data'
+    
+    def link_data(self, data):
+        if data and not self.data.exists():
+            self.data.link(data)
 
 
     @property
@@ -50,17 +83,18 @@ class Config(object):
         results.to_csv(self.train_results, float_format='%.6g')
 
 
-    @property
-    def test_result(self):
-        return self.res / 'test_result.json'
+    def test_result(self, epoch=None):
+        suffix = '' if not epoch else ('-%s' % epoch)
+        return self.res / ('test_result%s.json' % suffix)
 
-    def load_test_result(self):
-        if self.test_result.exists():
-            return load_json(self.test_result)
+    def load_test_result(self, epoch=None):
+        test_result = self.test_result(epoch)
+        if test_result.exists():
+            return load_json(test_result)
         return None
 
-    def save_test_result(self, result):
-        save_json(self.test_result, numpy_to_builtin(result))
+    def save_test_result(self, result, epoch=None):
+        save_json(self.test_result(epoch), numpy_to_builtin(result))
 
 
     @property
@@ -104,7 +138,7 @@ class Config(object):
             path = self.model_save(epoch)
         save_path = Path(path)
         if save_path.exists():
-            return torch.load(save_path)
+            return torch.load(save_path, map_location=(None if torch.cuda.is_available() else 'cpu'))
         return None
 
     def save_model_state(self, epoch, state):

@@ -1,16 +1,18 @@
+from __future__ import print_function, absolute_import
+
+import numpy as np
+
 class Model(object):
 
-    def __init__(self, exp, config, cpu=False, debug=False):
-        self.exp = exp
+    def __init__(self, config, cpu=False, debug=False):
         self.config = config
-        self.params = config.params
         self.debug = debug
         self.device = 'cpu' if cpu else 'cuda'
     
         self.init_model()
     
     @classmethod
-    def get_params(cls, exp):
+    def get_params(cls, config):
         return {}
     
     def init_model(self):
@@ -28,24 +30,18 @@ class Model(object):
     def get_test_data(self):
         raise NotImplementedError('Must implement get_test_data')
 
-    def get_pred(self, pred_key):
-        return self.get_pred_data(pred_key), self.get_pred_saver(pred_key)
-        
-    def get_pred_data(self, pred_key):
+    def get_pred_data(self, pred_in_path):
         raise NotImplementedError('Must implement get_pred_data')
     
-    def get_pred_saver(self, pred_key):
-        raise NotImplementedError('Must implement get_pred_saver')
+    def save_pred(self, pred_out_path, pred):
+        np.save(pred_out_path, pred)
     
     def fit(self):
         raise NotImplementedError('Must implement fit')
     
-    def test(self):
-        raise NotImplementedError('Must implement test')
-
+    def evaluate(self, gen):
+        raise NotImplementedError('Must implement evaluate')
+    
     def predict(self):
         raise NotImplementedError('Must implement predict')
-
-    def save_pred(self, pred_key, pred_out):
-        raise NotImplementedError('Must implement save_pred')
 

@@ -1,5 +1,5 @@
 from __future__ import print_function, absolute_import
-from .callbacks import Callback
+from . import Callback
 
 class ModelSaver(Callback):
     def __init__(self, config):

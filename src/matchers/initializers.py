@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 
-from matchers import WeightMatcher
+from . import WeightMatcher
 
 
 class KaimingNormalInitializer(WeightMatcher):

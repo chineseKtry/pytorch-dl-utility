@@ -9,28 +9,28 @@ import numpy as np
 import pandas as pd
 import torch
 
-from util import Namespace, format_json
-from util.torch import to_torch, from_torch
-from .model import Model
-from matchers import apply_matchers
-from callbacks.result_monitor import ResultMonitor
-from callbacks.model_saver import ModelSaver
-from callbacks.train_progress_bar import TrainProgressBar
+from ..util import Namespace, format_json
+from ..util.torch import to_torch, from_torch
+from . import Model
+from ..matchers import apply_matchers
+from ..callbacks.result_monitor import ResultMonitor
+from ..callbacks.model_saver import ModelSaver
+from ..callbacks.train_progress import TrainProgress
 
 class NNModel(Model):
 
-    def set_model(self, network, optimizer, initializers=[], regularizers=[], constraints=[]):
+    def set_model(self, network):
         self.epoch = 0
         self.network = network.to(self.device)
-        self.optimizer = optimizer
-        self.regularizers = regularizers
-        self.constraints = constraints
-        apply_matchers(self.network.named_modules(), initializers)
+        self.optimizer = network.optimizer
+        apply_matchers(self.network.named_modules(), getattr(network, 'initializers', []))
+        self.regularizers = getattr(network, 'regularizers', [])
+        self.constraints = getattr(network, 'constraints', [])
         if self.debug:
             print(self.network)
     
     def fit(self, stop_epoch, callbacks=[ResultMonitor, ModelSaver]):
-        callbacks.append(TrainProgressBar)
+        callbacks.append(TrainProgress)
         callbacks = [cb(self.config) for cb in callbacks]
 
         self.network.train()
@@ -42,7 +42,7 @@ class NNModel(Model):
         while not train_state.stop and self.epoch < stop_epoch:
             start = time()
             t_results = pd.DataFrame([self.fit_batch(xy) for xy in train_gen])
-            t_results = pd.DataFrame([self.fit_batch(xy) for xy in train_gen])
+
             self.epoch += 1
             epoch_result = t_results.mean(axis=0).add_prefix('train_')
 
@@ -70,47 +70,15 @@ class NNModel(Model):
         _, y = xy
         return self.train_metrics(y, from_torch(pred_t))
     
-    def run_predict(self, gen):
+    def predict(self, gen):
         self.network.eval()
         with torch.no_grad():
             preds = [from_torch(self.network(*to_torch(xy, device=self.device))[1]) for xy in gen]
         return reduce_preds(preds)
 
     def evaluate(self, gen):
-        return self.eval_metrics(gen.get_Y(), self.run_predict(gen))
+        return self.eval_metrics(gen.get_Y(), self.predict(gen))
     
-    def test(self):
-        result = self.config.load_test_result()
-        if result:
-            print('Loaded previous test result:', format_json(result))
-        else:
-            if self.epoch == 0:
-                state = self.config.load_best_model_state()
-                assert state is not None, 'No saved trained model exist'
-                self.set_state(state)
-            result = self.evaluate(self.get_test_data())
-            self.config.save_test_result(result)
-            print('Test result:', format_json(result))
-        return self
-
-    def predict(self, pred_key):
-        gen, saver = self.get_pred(pred_key)
-        if not gen:
-            return self
-        if self.epoch == 0:
-            state = self.config.load_best_model_state()
-            assert state is not None, 'No saved trained model exist'
-            self.set_state(state)
-        saver(self.run_predict(gen))
-        return self
-    
-    def get_pred_saver(self, pred_key):
-        def saver(pred_out):
-            pred_file = self.config.res / pred_key + '.npy'
-            np.save(pred_file, pred_out)
-            print('Saved prediction for %s to %s' % (pred_key, pred_file))
-        return saver
-
     def train_metrics(self, y_true, pred):
         raise NotImplementedError('Must override train_metrics')
 
