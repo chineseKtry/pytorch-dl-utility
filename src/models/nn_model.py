@@ -19,7 +19,7 @@ from ..callbacks.train_progress import TrainProgress
 
 class NNModel(Model):
 
-    def set_model(self, network):
+    def set_network(self, network):
         self.epoch = 0
         self.network = network.to(self.device)
         self.optimizer = network.optimizer
@@ -29,8 +29,8 @@ class NNModel(Model):
         if self.debug:
             print(self.network)
     
-    def fit(self, stop_epoch, callbacks=[ResultMonitor, ModelSaver]):
-        callbacks.append(TrainProgress)
+    def fit(self, stop_epoch):
+        callbacks = [ResultMonitor, ModelSaver, TrainProgress]
         callbacks = [cb(self.config) for cb in callbacks]
 
         self.network.train()
@@ -85,7 +85,7 @@ class NNModel(Model):
     def eval_metrics(self, y_true, pred):
         raise NotImplementedError('Must override eval_metrics')
 
-    def hyperband_reward(self, epoch_result):
+    def reward(self, epoch_result):
         return -epoch_result['val_loss']
 
     def get_state(self):

@@ -119,7 +119,12 @@ class Path(str):
     def cp(self, dest):
         shutil.copy(self, dest)
     
-    def link(self, target):
+    def link(self, target, force=False):
+        if self.exists():
+            if not force:
+                return
+            else:
+                self.rm()
         os.symlink(target, self)
 
     def exists(self):

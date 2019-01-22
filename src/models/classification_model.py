@@ -15,5 +15,5 @@ class ClassificationModel(NNModel):
             'auroc': metrics.auroc(y_true, pred['y'])
         }
 
-    def get_hyperband_reward(self, result):
+    def reward(self, result):
         return -result.loc['val_loss']

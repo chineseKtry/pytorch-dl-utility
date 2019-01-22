@@ -13,7 +13,7 @@ class ModelSaver(Callback):
     def on_epoch_end(self, model, train_state):
         if train_state.get('record_epoch', False):
             self.recorded_model = (model.epoch, model.get_state())
-        if train_state.get('save_recorded_to_disk', False):
+        if train_state.get('save_recorded_to_disk', False) and self.recorded_model:
             self.save_recorded()
 
     def on_train_end(self, model, train_state):

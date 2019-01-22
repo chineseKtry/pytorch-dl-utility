@@ -9,8 +9,6 @@ from train import get_train_args
 from src.util import *
 from src.util.progress_bar import ListProgress, RangeProgress
 from src.config import Config
-from src.callbacks.model_saver import ModelSaver
-from src.callbacks.result_monitor import ResultMonitor
 
 
 class Hyperband(object):
@@ -86,19 +84,16 @@ class Hyperband(object):
 
                 results = []
                 for config in ListProgress(T, desc='i = %s. Sweeping configs' % i):
+                    if config.stopped_early.exists():
+                        continue
                     print('Training %s for %s epochs' % (config.name, n_iters))
 
-                    res_mon = None
-                    def get_result_monitor(config):
-                        nonlocal res_mon
-                        res_mon = HyperbandResultMonitor(config, config.get('early_stop', None))
-                        return res_mon
+                    model = Model(config, cpu=args.cpu, debug=args.debug).fit(n_iters)
+                    reward, epoch = config.load_best_reward()
 
-                    model = Model(config, cpu=args.cpu, debug=args.debug).fit(n_iters, callbacks=[get_result_monitor, ModelSaver])
-
-                    info = dict(reward=res_mon.best_reward, config=config, epoch=res_mon.best_epoch)
+                    info = dict(reward=reward, config=config, epoch=epoch)
                     best_info = max(best_info, info, key=lambda k: k['reward'])
-                    if not res_mon.stopped_early:
+                    if not config.stopped_early.exists():
                         results.append(info)
                     print()
                 # select a number of best configurations for the next loop
@@ -141,43 +136,6 @@ class Hyperband(object):
         save_json(self.state_path, numpy_to_builtin(state))
 
 
-class HyperbandResultMonitor(ResultMonitor): # early stopping based on patience
-    def __init__(self, config, early_stop):
-        super(HyperbandResultMonitor, self).__init__(config)
-        self.early_stopping = early_stop or False
-        self.patience = early_stop
-        self.best_reward = -float('inf')
-        self.best_epoch = None
-        if config.best_reward.exists():
-            self.best_reward, self.best_epoch = config.load_best_reward()
-        self.stopped_early = False
-    
-    def on_epoch_end(self, model, train_state):
-        super(HyperbandResultMonitor, self).on_epoch_end(model, train_state)
-        reward_fn = model.hyperband_reward
-
-        reward = reward_fn(train_state.epoch_result)
-        train_state.record_epoch = False
-        train_state.save_recorded_to_disk = False
-        if reward > self.best_reward:
-            self.best_reward = reward
-            self.best_epoch = model.epoch
-            train_state.record_epoch = True
-            print('New best epoch %s with reward %s' % (self.best_epoch, self.best_reward))
-        elif self.best_epoch == model.epoch - 1:
-            train_state.save_recorded_to_disk = True
-            self.config.save_best_reward(self.best_reward, self.best_epoch)
-
-        if self.early_stopping and model.epoch > self.patience:
-            recent = self.train_results.iloc[-(self.patience + 1):]
-            last_rewards = recent.apply(reward_fn, axis=1)
-            if last_rewards.idxmax() == recent.index[0]:
-                self.stopped_early = model.epoch
-                train_state.stop = True
-                self.config.set_stopped_early()
-                print('Stopped early after %s / %s iterations' % (model.epoch, train_state.stop_epoch))
-                return
-
 def cache(f):
     cached_output = None
     def wrapper(*args):
@@ -199,7 +157,7 @@ if __name__ == '__main__':
         if args.clean == 2:
             subdirs, files = args.hyperband_path.ls()
             for subdir in subdirs:
-                subdirs.rm()
+                subdir.rm()
             for f in files:
                 if f._name != 'hyperband_config.json':
                     f.rm()

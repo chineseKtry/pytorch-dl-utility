@@ -17,8 +17,8 @@ def get_train_args(parser, config_arg_names=['train_batch', 'early_stop']):
     parser.add_argument('-te', '--train-epoch', dest='train_epoch', type=int, help='Number of epochs to train for')
     parser.add_argument('-tb', '--train-batch', dest='train_batch', type=int,
                         help='Batch size in gradient-based training')
-    parser.add_argument('-es', '--early-stop', dest='early_stop', type=int,
-                        help='Whether to stop early after a number of iterations with no improvement')
+    parser.add_argument('-es', '--early-stop', dest='early_stop', type=int, default=0,
+                        help='Whether to stop early after a number of iterations with no improvement to the reward criteria')
 
     parser.add_argument('--debug', dest='debug', default=False, action='store_true',
                         help='Debug mode, run one iteration')
