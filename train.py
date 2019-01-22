@@ -9,13 +9,13 @@ from src.util import *
 parser = argparse.ArgumentParser(description='Model training')
 parser.add_argument('result', type=Path, help='Result directory')
 
-def get_train_args(parser):
+def get_train_args(parser, config_arg_names=['train_batch', 'early_stop']):
     parser.add_argument('-f', '--model', dest='model', type=Path,
                         help='Path to python model file')
     parser.add_argument('-d', '--data', dest='data', type=Path, help='Data directory')
 
     parser.add_argument('-te', '--train-epoch', dest='train_epoch', type=int, help='Number of epochs to train for')
-    parser.add_argument('-tb', '--train_batch', dest='train_batch', type=int,
+    parser.add_argument('-tb', '--train-batch', dest='train_batch', type=int,
                         help='Batch size in gradient-based training')
     parser.add_argument('-es', '--early-stop', dest='early_stop', type=int,
                         help='Whether to stop early after a number of iterations with no improvement')
@@ -35,7 +35,7 @@ def get_train_args(parser):
         args.train_epoch = 1
 
     config_dict = {
-        k: v for k, v in vars(args).items() if v is not None and k in ['train_batch', 'early_stop']
+        k: v for k, v in vars(args).items() if v is not None and k in config_arg_names
     }
 
     return args, config_dict

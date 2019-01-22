@@ -1,14 +1,13 @@
-#!/usr/bin/env python2
+from __future__ import print_function, absolute_import
 
-import torch
-from torch import nn
-from torch.autograd import Variable
-import numpy as np
 from glob import glob
 import h5py
-import os
 
-from batch_generator import MatrixBatchGenerator
+import numpy as np
+import torch
+from torch.autograd import Variable
+
+from .matrix import MatrixGen
 
 def cont2ohe(old_x,new_x):
     '''converts a sequence in continuous space to one-hot encoded space
@@ -24,12 +23,11 @@ def cont2ohe(old_x,new_x):
     return np.expand_dims(ohe_x,axis=1)
     # return np.expand_dims(ohe_x*np.sum(old_x,axis=0),axis=1)
 
-class AdversarialGenerator():
-    def __init__(self,model,criterion,epsilon=1.0,num_iter=10,single_aa=False,ohe_output=False,use_cuda=False):
-        self.network = model.network
+class AdversarialGen():
+    def __init__(self,network,epsilon=1.0,num_iter=10,single_aa=False,ohe_output=False,use_cuda=False):
+        self.network = network
         self.epsilon = epsilon
         self.num_iter = num_iter
-        self.criterion = criterion
         self.ohe_output = ohe_output
         self.single_aa = single_aa
         self.use_cuda = use_cuda
@@ -70,14 +68,13 @@ class AdversarialGenerator():
             d = self.cudafy(torch.rand(seq_tensor.shape))
             d = d/d.view(d.shape[0],-1).pow(2).sum(1).view(-1,1,1,1)
             seq_tensor.data += d
-            target_tensor = Variable(self.cudafy(self.network(seq_tensor)['y_pred_loss']))
+            target_tensor = Variable(self.cudafy(self.network(seq_tensor, None)['pred_t']))
         else:
             target_tensor = Variable(self.cudafy(torch.from_numpy(Y[:, 1].astype(np.long))))
 
         if self.single_aa:
             seq_tensor.grad = None
-            out_dict = self.network(seq_tensor)
-            loss = self.criterion(out_dict['y_pred_loss'],target_tensor)
+            loss, _ = self.network(seq_tensor, target_tensor)
             loss.backward()
             grads = seq_tensor.grad.cpu().data.numpy()
 
@@ -89,8 +86,7 @@ class AdversarialGenerator():
                 seq_tensor.grad = None
 
                 # run forward & backward passes
-                out_dict = self.network(seq_tensor)
-                loss = self.criterion(out_dict['y_pred_loss'],target_tensor)
+                loss = self.network(seq_tensor, target_tensor)
                 loss.backward()
 
                 # update object
@@ -123,8 +119,7 @@ class AdversarialGenerator():
             seq_tensor.grad = None
 
             # run forward & backward passes
-            out = self.network(seq_tensor)
-            loss = self.criterion(out,target_tensor)
+            loss = self.network(seq_tensor, target_tensor)
             loss.backward()
 
             # update object
@@ -140,11 +135,11 @@ class AdversarialGenerator():
         new_X = np.concatenate([X,adv_X]).astype(np.float32)
 
         if Y is None:
-            return new_X
+            return new_X, None
         else:
             return new_X, np.tile(Y[:,0],2).astype(np.float32)
 
-class AdversarialH5pyBatchGenerator(MatrixBatchGenerator):
+class AdversarialH5pyGen(MatrixGen):
 
     def __init__(self, glob_str, adversarial_generator, batch_size=None, shuffle=False, process_x_y=lambda X, Y: (X, Y),task='classification'):
         self.adversarial_generator = adversarial_generator
@@ -154,9 +149,9 @@ class AdversarialH5pyBatchGenerator(MatrixBatchGenerator):
         X, Y = zip(*[(file['data'][()], file['label'][()]) for file in files])
         X, Y = np.concatenate(X, axis=0), np.concatenate(Y, axis=0)
         X, Y = process_x_y(X, Y)
-        super(AdversarialH5pyBatchGenerator, self).__init__(X, Y, batch_size, shuffle)
+        super(AdversarialH5pyGen, self).__init__(X, Y, batch_size, shuffle)
 
-    # override MatrixBatchGenerator next() to include adversarial examples
+    # override MatrixGen next() to include adversarial examples
     def next(self):
         if self.i >= self.N:
             raise StopIteration
@@ -164,7 +159,7 @@ class AdversarialH5pyBatchGenerator(MatrixBatchGenerator):
         self.i += self.batch_size
 
         if self.Y is None:
-            return self.adversarial_generator.generate_classification(self.X[start: self.i])
+            return self.adversarial_generator.generate_classification(self.X[start: self.i]), None
         else:
             if self.task == 'classification':
                 return self.adversarial_generator.generate_classification(self.X[start: self.i], self.Y[start: self.i])

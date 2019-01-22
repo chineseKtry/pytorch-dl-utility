@@ -1,16 +1,11 @@
+from __future__ import print_function, absolute_import
 from future.utils import implements_iterator
 
-from glob import glob
-import h5py
 import os
-
 import numpy as np
 
-import torch
-from torch.utils import data
-
 @implements_iterator
-class MatrixBatchGenerator(object):
+class MatrixGen(object):
 
     def __init__(self, X, Y=None, batch_size=None, shuffle=False):
         assert Y is None or len(X) == len(Y), 'X and Y have mismatched lengths (%s and %s)' % (len(X), len(Y))
@@ -48,16 +43,6 @@ class MatrixBatchGenerator(object):
         indices = np.random.permutation(N)
         X, Y = X[indices], Y[indices]
         num_train = int(N * val_ratio)
-        train_gen = MatrixBatchGenerator(X[:num_train], Y[:num_train], batch_size)
-        val_gen = MatrixBatchGenerator(X[num_train:], Y[num_train:])
+        train_gen = MatrixGen(X[:num_train], Y[:num_train], batch_size)
+        val_gen = MatrixGen(X[num_train:], Y[num_train:])
         return train_gen, val_gen
-
-class H5pyBatchGenerator(MatrixBatchGenerator):
-
-    def __init__(self, glob_str, batch_size=None, shuffle=False, process_x_y=lambda X, Y: (X, Y)):
-        files = [h5py.File(path) for path in glob(glob_str)]
-        X, Y = zip(*[(file['data'][()], file['label'][()]) for file in files])
-        X, Y = np.concatenate(X, axis=0), np.concatenate(Y, axis=0)
-        X, Y = process_x_y(X, Y)
-        super(H5pyBatchGenerator, self).__init__(X, Y, batch_size, shuffle)
-
