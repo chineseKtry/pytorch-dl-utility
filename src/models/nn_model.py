@@ -49,7 +49,7 @@ class NNModel(Model):
             if val_gen:
                 v_result = pd.Series(self.evaluate(val_gen)).add_prefix('val_')
                 epoch_result = epoch_result.append(v_result)
-            epoch_result['execution_time'] = '%.5g' % (time() - start)
+            epoch_result['execution_time'] = round(time() - start, 5)
             
             train_state.update(epoch_result=epoch_result)
             [cb.on_epoch_end(self, train_state) for cb in callbacks]

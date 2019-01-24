@@ -1,6 +1,7 @@
 from __future__ import print_function, absolute_import
 
 import pandas as pd
+import visdom
 
 from . import Callback
 
@@ -16,6 +17,8 @@ class ResultMonitor(Callback):
             self.best_reward, self.best_epoch = config.load_best_reward()
         self.stopped_early = False
 
+        self.vis = visdom.Visdom(port=8097)
+
     def on_train_start(self, model, train_state):
         self.train_results = None
         if train_state.stop: return
@@ -24,6 +27,10 @@ class ResultMonitor(Callback):
             print('Preempting training because already stopped early')
             return
         self.train_results = self.config.load_train_results()
+        if self.train_results is not None:
+            for key, column in self.train_results.iteritems():
+                self.plot_line(key, column.index, column, 'replace')
+
         if self.train_results is not None and self.train_results.index[-1] >= train_state.stop_epoch:
             train_state.stop = True
             print('Preempting training because already trained past %s epochs' % train_state.stop_epoch)
@@ -68,9 +75,15 @@ class ResultMonitor(Callback):
             self.train_results = pd.DataFrame([result], index=pd.Series([epoch], name='epoch'))
         else:
             self.train_results.loc[epoch] = result
+        for key, value in result.iteritems():
+            self.plot_line(key, [epoch], [value], 'append')
 
     def get_train_result(self, epoch):
         if self.train_results is None:
             return None
         else:
             return self.train_results.loc[epoch]
+    
+    def plot_line(self, key, X, Y, update):
+        self.vis.line(X=X, Y=Y, win=key, update=update, name=self.config.name, opts=dict(title=key))
+

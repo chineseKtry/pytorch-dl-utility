@@ -47,6 +47,7 @@ def train(config, train_epoch, cpu=False, debug=False):
     Model = import_module('model', config.model._real._).Model
     print('Training %s for %s epochs' % (config.name, train_epoch))
     model = Model(config, cpu=cpu, debug=debug)
+    assert train_epoch is not None, 'Train epoch cannot be none'
     model.fit(train_epoch)
 
 

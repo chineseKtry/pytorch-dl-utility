@@ -8,3 +8,4 @@ six
 h5py
 future
 pandas
+visdom
