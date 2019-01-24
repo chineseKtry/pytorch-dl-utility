@@ -1,5 +1,7 @@
 # PyTorch Deep Learning Utility
-This framework runs hyperparameter tuning, training, and prediction on a provided PyTorch model and data. It logs all model performance metrics to a training file, save best models while training, and has options for early stop based off your defined criteria.
+This framework runs hyperparameter tuning, training, and prediction on a provided PyTorch model and data. It logs all model performance metrics to a training file, plots performances in real-time with Visdom, save best models while training, and has options for early stop based off your defined criteria.
+
+![alt text](https://github.com/gifford-lab/pytorch-dl-utility/blob/master/resources/visdom.png "Visdom Performance Plotting")
 
 ## Overview
 In general, the user needs to define three components in a python file (without loss of generality call this file `model.py`):
@@ -18,6 +20,10 @@ pip install -r requirements.txt
 WLOG let the desired result directory (empty at first) be `result_dir`. The first argument is usually `result_dir`
 
 ### Training
+```
+python3 -m visdom.server
+```
+In a separate shell:
 ```
 cd result_dir && python3 train.py . -f model.py -d data_dir -te train_epoch [-tb train_batch] [-es early_stop] [--debug] [--cpu]
 ```
@@ -38,8 +44,12 @@ The `-v` / `--eval` option evaluates the model on a predefined test set and metr
 
 ### HyperBand Hyperparameter Search
 Given an empty directory `hyperband_dir`, for every hyperparameter set trained, the `result_dir` for this set of hyperparameter will be `hyperband_dir/hyperparameter_set_name`.
-
 The first argument of `hyperband.py` is `hyperband_dir`, otherwise the arguments are the same as `train.py`
+
+```
+python3 -m visdom.server
+```
+In a separate shell:
 ```
 cd hyperband_dir && python3 hyperband.py . -f model.py -d data_dir -te train_epoch [-tb train_batch] [-es early_stop] [--debug] [--cpu]
 ```
